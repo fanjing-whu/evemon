@@ -64,7 +64,7 @@ namespace EVEMon.Common.Service
 
                 if (!downloadSuccess)
                 {
-                    EveMonClient.Trace("SerenDataLoader: Failed to download some ESI data");
+                    EveMonClient.Trace("SerenDataLoader: Failed to download some ESI data, continuing with partial data");
                     // Continue with partial data if available
                 }
 
@@ -74,7 +74,14 @@ namespace EVEMon.Common.Service
 
                 // Convert and load data
                 ReportProgress(80, "Loading static data...");
-                await LoadStaticDataAsync();
+                bool loadSuccess = await LoadStaticDataAsync();
+
+                if (!loadSuccess)
+                {
+                    EveMonClient.Trace("SerenDataLoader: Failed to load from ESI cache, trying fallback...");
+                    // Fallback to local datafiles will be handled in MainWindow
+                    return false;
+                }
 
                 ReportProgress(100, "Seren data load complete");
                 EveMonClient.Trace("SerenDataLoader: Load complete");
@@ -193,52 +200,90 @@ namespace EVEMon.Common.Service
         /// <summary>
         /// Loads the static data into memory from the converted datafiles.
         /// </summary>
-        private static async Task LoadStaticDataAsync()
+        /// <returns>True if at least items and skills were loaded successfully.</returns>
+        private static async Task<bool> LoadStaticDataAsync()
         {
+            bool itemsLoaded = false;
+            bool skillsLoaded = false;
+
             // Load items
             ReportProgress(85, "Loading items...");
-            var itemsDatafile = ESIToDatafileConverter.LoadDatafileFromCache<Serialization.Datafiles.ItemsDatafile>(
-                "eve-items-esi.xml.gzip");
-            if (itemsDatafile != null)
+            try
             {
-                await Task.Run(() => Data.StaticItems.LoadFromDatafile(itemsDatafile));
-                // Notify MainWindow to update progress bar
-                GlobalDatafileCollection.OnDatafileLoaded();
+                var itemsDatafile = ESIToDatafileConverter.LoadDatafileFromCache<Serialization.Datafiles.ItemsDatafile>(
+                    "eve-items-esi.xml.gzip");
+                if (itemsDatafile != null)
+                {
+                    await Task.Run(() => Data.StaticItems.LoadFromDatafile(itemsDatafile));
+                    // Notify MainWindow to update progress bar
+                    GlobalDatafileCollection.OnDatafileLoaded();
+                    itemsLoaded = true;
+                }
+                else
+                {
+                    EveMonClient.Trace("SerenDataLoader: Items datafile not found in cache");
+                }
+            }
+            catch (Exception ex)
+            {
+                EveMonClient.Trace($"SerenDataLoader: Failed to load items: {ex.Message}");
+                ExceptionHandler.LogException(ex, false);
             }
 
             // Load skills
             ReportProgress(90, "Loading skills...");
-            var skillsDatafile = ESIToDatafileConverter.LoadDatafileFromCache<Serialization.Datafiles.SkillsDatafile>(
-                "eve-skills-esi.xml.gzip");
-            if (skillsDatafile != null)
+            try
             {
-                await Task.Run(() => Data.StaticSkills.LoadFromDatafile(skillsDatafile));
-                // Notify MainWindow to update progress bar
-                GlobalDatafileCollection.OnDatafileLoaded();
+                var skillsDatafile = ESIToDatafileConverter.LoadDatafileFromCache<Serialization.Datafiles.SkillsDatafile>(
+                    "eve-skills-esi.xml.gzip");
+                if (skillsDatafile != null)
+                {
+                    await Task.Run(() => Data.StaticSkills.LoadFromDatafile(skillsDatafile));
+                    // Notify MainWindow to update progress bar
+                    GlobalDatafileCollection.OnDatafileLoaded();
+                    skillsLoaded = true;
+                }
+                else
+                {
+                    EveMonClient.Trace("SerenDataLoader: Skills datafile not found in cache");
+                }
+            }
+            catch (Exception ex)
+            {
+                EveMonClient.Trace($"SerenDataLoader: Failed to load skills: {ex.Message}");
+                ExceptionHandler.LogException(ex, false);
+            }
+
+            // If core data (items or skills) failed to load, return false
+            if (!itemsLoaded && !skillsLoaded)
+            {
+                EveMonClient.Trace("SerenDataLoader: Critical data files missing, load failed");
+                return false;
             }
 
             // Load other datafiles that are not ESI-based
             ReportProgress(92, "Loading certificates...");
-            await Task.Run(() => Data.StaticCertificates.Load());
+            try { await Task.Run(() => Data.StaticCertificates.Load()); } catch { /* Non-critical */ }
             GlobalDatafileCollection.OnDatafileLoaded();
 
             ReportProgress(94, "Loading geography...");
-            await Task.Run(() => Data.StaticGeography.Load());
+            try { await Task.Run(() => Data.StaticGeography.Load()); } catch { /* Non-critical */ }
             GlobalDatafileCollection.OnDatafileLoaded();
 
             ReportProgress(96, "Loading blueprints...");
-            await Task.Run(() => Data.StaticBlueprints.Load());
+            try { await Task.Run(() => Data.StaticBlueprints.Load()); } catch { /* Non-critical */ }
             GlobalDatafileCollection.OnDatafileLoaded();
 
             ReportProgress(98, "Loading reprocessing...");
-            await Task.Run(() => Data.StaticReprocessing.Load());
+            try { await Task.Run(() => Data.StaticReprocessing.Load()); } catch { /* Non-critical */ }
             GlobalDatafileCollection.OnDatafileLoaded();
 
             ReportProgress(99, "Loading masteries...");
-            await Task.Run(() => Data.StaticMasteries.Load());
+            try { await Task.Run(() => Data.StaticMasteries.Load()); } catch { /* Non-critical */ }
             GlobalDatafileCollection.OnDatafileLoaded();
 
             EveMonClient.Trace("SerenDataLoader: Loaded static data from converted files");
+            return itemsLoaded || skillsLoaded;
         }
 
         /// <summary>
