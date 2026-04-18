@@ -31,6 +31,16 @@ namespace EVEMon.Common.Data
             SkillsDatafile datafile = Util.DeserializeDatafile<SkillsDatafile>(DatafileConstants.SkillsDatafile,
                 Util.LoadXslt(Properties.Resources.DatafilesXSLT));
 
+            LoadFromDatafile(datafile);
+        }
+
+        /// <summary>
+        /// Loads static skills from a pre-deserialized datafile.
+        /// Used by SerenDataLoader for ESI mode.
+        /// </summary>
+        /// <param name="datafile">The pre-loaded skills datafile.</param>
+        internal static void LoadFromDatafile(SkillsDatafile datafile)
+        {
             // Fetch deserialized data
             s_arrayIndicesCount = 0;
             List<Collection<SerializableSkillPrerequisite>> prereqs = new List<Collection<SerializableSkillPrerequisite>>();

@@ -27,15 +27,25 @@ namespace EVEMon.Common.Data
             if (MarketGroups != null)
                 return;
 
+            // Deserialize the items datafile
+            ItemsDatafile datafile = Util.DeserializeDatafile<ItemsDatafile>(DatafileConstants.ItemsDatafile,
+                Util.LoadXslt(Properties.Resources.DatafilesXSLT));
+
+            LoadFromDatafile(datafile);
+        }
+
+        /// <summary>
+        /// Loads static items from a pre-deserialized datafile.
+        /// Used by SerenDataLoader for ESI mode.
+        /// </summary>
+        /// <param name="datafile">The pre-loaded items datafile.</param>
+        internal static void LoadFromDatafile(ItemsDatafile datafile)
+        {
             // Create the implants slots
             for (int i = 0; i < s_implantSlots.Length; i++)
             {
                 s_implantSlots[i] = new ImplantCollection((ImplantSlots)i);
             }
-
-            // Deserialize the items datafile
-            ItemsDatafile datafile = Util.DeserializeDatafile<ItemsDatafile>(DatafileConstants.ItemsDatafile,
-                Util.LoadXslt(Properties.Resources.DatafilesXSLT));
 
             MarketGroups = new MarketGroupCollection(null, datafile.MarketGroups);
 

@@ -6,6 +6,7 @@ using EVEMon.CharactersComparison;
 using EVEMon.Common;
 using EVEMon.Common.CloudStorageServices;
 using EVEMon.Common.Collections.Global;
+using EVEMon.Common.Service;
 using EVEMon.Common.Constants;
 using EVEMon.Common.Controls;
 using EVEMon.Common.CustomEventArgs;
@@ -185,6 +186,7 @@ namespace EVEMon
             // Subscribe events
             TimeCheck.TimeCheckCompleted += TimeCheck_TimeCheckCompleted;
             GlobalDatafileCollection.LoadingProgress += GlobalDatafileCollection_LoadingProgress;
+            SerenDataLoader.LoadProgress += SerenDataLoader_LoadProgress;
             EveMonClient.NotificationSent += EveMonClient_NotificationSent;
             EveMonClient.NotificationInvalidated += EveMonClient_NotificationInvalidated;
             EveMonClient.MonitoredCharacterCollectionChanged += EveMonClient_MonitoredCharacterCollectionChanged;
@@ -221,7 +223,21 @@ namespace EVEMon
         private async Task InitializeData()
         {
             // Load static data
-            await GlobalDatafileCollection.LoadAsync();
+            // For Seren (Chinese server), use ESI-based data loading
+            if (Settings.ServerType == EveServerType.Seren)
+            {
+                EveMonClient.Trace("MainWindow: Loading data for Seren server (ESI mode)");
+                bool success = await SerenDataLoader.LoadAsync();
+                if (!success)
+                {
+                    EveMonClient.Trace("MainWindow: Seren data load failed, falling back to local files");
+                    await GlobalDatafileCollection.LoadAsync();
+                }
+            }
+            else
+            {
+                await GlobalDatafileCollection.LoadAsync();
+            }
 
             // Load cache data
             await Task.Run(() => {
@@ -347,6 +363,7 @@ namespace EVEMon
             SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;
             TimeCheck.TimeCheckCompleted -= TimeCheck_TimeCheckCompleted;
             GlobalDatafileCollection.LoadingProgress -= GlobalDatafileCollection_LoadingProgress;
+            SerenDataLoader.LoadProgress -= SerenDataLoader_LoadProgress;
             EveMonClient.NotificationSent -= EveMonClient_NotificationSent;
             EveMonClient.NotificationInvalidated -= EveMonClient_NotificationInvalidated;
             EveMonClient.MonitoredCharacterCollectionChanged -= EveMonClient_MonitoredCharacterCollectionChanged;
@@ -668,6 +685,36 @@ namespace EVEMon
         private void GlobalDatafileCollection_LoadingProgress(object sender, EventArgs e)
         {
             tsDatafilesLoadingProgressBar.PerformStep();
+        }
+
+        /// <summary>
+        /// Handles the LoadProgress event of the SerenDataLoader control.
+        /// Updates the status bar text with Seren loading progress.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">The <see cref="SerenLoadProgressEventArgs" /> instance containing the event data.</param>
+        private void SerenDataLoader_LoadProgress(object sender, SerenLoadProgressEventArgs e)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new EventHandler<SerenLoadProgressEventArgs>(SerenDataLoader_LoadProgress), sender, e);
+                return;
+            }
+
+            // Update status label with Seren loading progress
+            lblStatus.Text = $"ESI: {e.Status}";
+            lblStatus.ToolTipText = $"Seren Server Loading - {e.Percent}%";
+
+            // Update progress bar
+            if (e.Percent > 0 && e.Percent < 100)
+            {
+                tsDatafilesLoadingProgressBar.Value = Math.Min(e.Percent, tsDatafilesLoadingProgressBar.Maximum);
+                tsDatafilesLoadingProgressBar.Visible = true;
+            }
+            else if (e.Percent >= 100)
+            {
+                tsDatafilesLoadingProgressBar.Visible = false;
+            }
         }
 
         #endregion
