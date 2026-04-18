@@ -1,5 +1,6 @@
 using EVEMon.Common.Collections.Global;
 using EVEMon.Common.Enumerations;
+using EVEMon.Common.Helpers;
 using EVEMon.Common.Models;
 using System;
 using System.IO;
@@ -58,9 +59,10 @@ namespace EVEMon.Common.Service
 
                 // Download and cache all SDE data
                 ReportProgress(10, "Downloading SDE data from ESI...");
+                var downloadProgress = new Progress<(int current, int total, string status)>(
+                    p => ReportProgress(10 + p.current * 50 / p.total, p.status));
                 bool downloadSuccess = await ESISdeDownloader.DownloadAllSdeDataAsync(
-                    progress => ReportProgress(10 + progress.current * 50 / progress.total, progress.status),
-                    forceRefresh);
+                    downloadProgress, forceRefresh);
 
                 if (!downloadSuccess)
                 {
@@ -127,9 +129,9 @@ namespace EVEMon.Common.Service
         /// <summary>
         /// Clears the ESI cache.
         /// </summary>
-        public static void ClearCache()
+        public static async Task ClearCacheAsync()
         {
-            ESISdeCacheManager.ClearAll();
+            await ESISdeCacheManager.ClearAllCacheAsync();
             EveMonClient.Trace("SerenDataLoader: Cache cleared");
         }
 

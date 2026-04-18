@@ -605,8 +605,8 @@ namespace EVEMon.SettingsUI
             serverTypeComboBox.Items.Clear();
             serverTypeComboBox.Items.AddRange(new[]
             {
-                EveServerType.Tranquility.GetDisplayName(),
-                EveServerType.Seren.GetDisplayName()
+                EveServerTypeHelper.GetDisplayName(EveServerType.Tranquility),
+                EveServerTypeHelper.GetDisplayName(EveServerType.Seren)
             });
         }
 

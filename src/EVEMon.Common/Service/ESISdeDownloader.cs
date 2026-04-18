@@ -234,10 +234,10 @@ namespace EVEMon.Common.Service
                             string cachedData = await ESISdeCacheManager.ReadCacheAsync($"{endpoint.Name}_page{currentPage}");
                             if (!string.IsNullOrEmpty(cachedData))
                             {
-                                var pageData = JsonSerializer.Deserialize<List<object>>(cachedData);
-                                if (pageData != null)
+                                var cachedPageData = JsonSerializer.Deserialize<List<object>>(cachedData);
+                                if (cachedPageData != null)
                                 {
-                                    allData.AddRange(pageData);
+                                    allData.AddRange(cachedPageData);
                                 }
                                 currentPage++;
                                 continue;
@@ -261,7 +261,7 @@ namespace EVEMon.Common.Service
                         // Get Expires header from content headers (Cache-Control: max-age)
                         if (response.Content.Headers.Expires != null)
                         {
-                            expires = response.Content.Headers.Expires.Value;
+                            expires = response.Content.Headers.Expires.Value.UtcDateTime;
                         }
 
                         // Get total pages from header
@@ -375,7 +375,7 @@ namespace EVEMon.Common.Service
             // Get Expires header from content headers
             if (response.Content.Headers.Expires != null)
             {
-                expires = response.Content.Headers.Expires.Value;
+                expires = response.Content.Headers.Expires.Value.UtcDateTime;
             }
 
             // Read content
