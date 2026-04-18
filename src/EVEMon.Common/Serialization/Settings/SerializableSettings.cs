@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.Xml.Serialization;
+using EVEMon.Common.Enumerations;
 using EVEMon.Common.Enumerations.UISettings;
 using EVEMon.Common.SettingsObjects;
 
@@ -45,6 +46,14 @@ namespace EVEMon.Common.Serialization.Settings
         [XmlAttribute("revision")]
         public int Revision { get; set; }
 
+        /// <summary>
+        /// Gets or sets the EVE server type (Tranquility for TQ, Seren for Chinese server).
+        /// </summary>
+        [XmlAttribute("serverType")]
+        public EveServerType ServerType { get; set; }
+
+        [XmlElement("compatibility")]
+        public CompatibilityMode Compatibility { get; set; }
         [XmlArray("esiKeys")]
         [XmlArrayItem("esikey")]
         public Collection<SerializableESIKey> ESIKeys => m_esiKeys;

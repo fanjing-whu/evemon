@@ -35,7 +35,7 @@ namespace EVEMon.Common.Models
         /// Gets the server's name.
         /// </summary>
         private static string Name => EveMonClient.APIProviders.CurrentProvider.Url.Host !=
-            APIProvider.TestProvider.Url.Host ? "Tranquility" : "Singularity";
+            APIProvider.TestProvider.Url.Host ? EveServerConfig.ServerName : "Singularity";
 
         /// <summary>
         /// Gets the server status message.

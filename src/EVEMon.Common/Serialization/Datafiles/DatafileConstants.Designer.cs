@@ -131,5 +131,57 @@ namespace EVEMon.Common.Serialization.Datafiles {
                 return ResourceManager.GetString("SkillsDatafile", resourceCulture);
             }
         }
+
+        /// <summary>
+        /// Gets the datafile name with the correct language suffix based on server type.
+        /// </summary>
+        /// <param name="baseName">The base datafile name without language suffix.</param>
+        /// <returns>The datafile name with appropriate language suffix.</returns>
+        private static string GetLocalizedDatafileName(string baseName)
+        {
+            string languageSuffix = Models.EveServerConfig.CurrentServerType == 
+                Enumerations.EveServerType.Seren ? "-zh-CN" : "-en-US";
+            return baseName + languageSuffix + ".xml.gzip";
+        }
+
+        /// <summary>
+        /// Gets the blueprints datafile with the correct language suffix.
+        /// </summary>
+        public static string BlueprintsDatafileLocalized => GetLocalizedDatafileName("eve-blueprints");
+
+        /// <summary>
+        /// Gets the certificates datafile with the correct language suffix.
+        /// </summary>
+        public static string CertificatesDatafileLocalized => GetLocalizedDatafileName("eve-certificates");
+
+        /// <summary>
+        /// Gets the geography datafile with the correct language suffix.
+        /// </summary>
+        public static string GeographyDatafileLocalized => GetLocalizedDatafileName("eve-geography");
+
+        /// <summary>
+        /// Gets the items datafile with the correct language suffix.
+        /// </summary>
+        public static string ItemsDatafileLocalized => GetLocalizedDatafileName("eve-items");
+
+        /// <summary>
+        /// Gets the masteries datafile with the correct language suffix.
+        /// </summary>
+        public static string MasteriesDatafileLocalized => GetLocalizedDatafileName("eve-masteries");
+
+        /// <summary>
+        /// Gets the properties datafile with the correct language suffix.
+        /// </summary>
+        public static string PropertiesDatafileLocalized => GetLocalizedDatafileName("eve-properties");
+
+        /// <summary>
+        /// Gets the reprocessing datafile with the correct language suffix.
+        /// </summary>
+        public static string ReprocessingDatafileLocalized => GetLocalizedDatafileName("eve-reprocessing");
+
+        /// <summary>
+        /// Gets the skills datafile with the correct language suffix.
+        /// </summary>
+        public static string SkillsDatafileLocalized => GetLocalizedDatafileName("eve-skills");
     }
 }

@@ -3,10 +3,12 @@ using EVEMon.Common.CloudStorageServices;
 using EVEMon.Common.Constants;
 using EVEMon.Common.Controls;
 using EVEMon.Common.Controls.MultiPanel;
+using EVEMon.Common.Enumerations;
 using EVEMon.Common.Enumerations.UISettings;
 using EVEMon.Common.Extensions;
 using EVEMon.Common.Helpers;
 using EVEMon.Common.MarketPricer;
+using EVEMon.Common.Models;
 using EVEMon.Common.Models.Comparers;
 using EVEMon.Common.Resources.Skill_Select;
 using EVEMon.Common.Serialization.Settings;
@@ -180,6 +182,10 @@ namespace EVEMon.SettingsUI
             proxyPortTextBox.Text = m_settings.Proxy.Port.ToString(CultureConstants.DefaultCulture);
             proxyHttpHostTextBox.Text = m_settings.Proxy.Host;
             proxyAuthenticationButton.Tag = m_settings.Proxy;
+
+            // Server type
+            InitializeServerTypeComboBox();
+            serverTypeComboBox.SelectedIndex = (int)m_settings.ServerType;
 
             // Client ID / Secret
             clientIDTextBox.Text = m_settings.SSOClientID;
@@ -520,6 +526,9 @@ namespace EVEMon.SettingsUI
                 m_settings.Proxy.Port = proxyPort;
             m_settings.Proxy.Host = proxyHttpHostTextBox.Text;
 
+            // Server type
+            m_settings.ServerType = (EveServerType)serverTypeComboBox.SelectedIndex;
+
             // Client ID / Secret
             m_settings.SSOClientID = (clientIDTextBox.Text ?? string.Empty).Trim();
             m_settings.SSOClientSecret = (clientSecretTextBox.Text ?? string.Empty).Trim();
@@ -586,6 +595,19 @@ namespace EVEMon.SettingsUI
 
             if (cbProvidersList.SelectedIndex == -1 && cbProvidersList.Items.Count > 0)
                 cbProvidersList.SelectedIndex = 0;
+        }
+
+        /// <summary>
+        /// Populates the combobox for the EVE server type.
+        /// </summary>
+        private void InitializeServerTypeComboBox()
+        {
+            serverTypeComboBox.Items.Clear();
+            serverTypeComboBox.Items.AddRange(new[]
+            {
+                EveServerType.Tranquility.GetDisplayName(),
+                EveServerType.Seren.GetDisplayName()
+            });
         }
 
         /// <summary>

@@ -155,7 +155,7 @@ namespace EVEMon.Common.Models
             string path = string.Format(GetESIMethod(requestMethod).Path, id, paramStr);
             
             // Build the URI
-            var builder = new UriBuilder(new Uri(NetworkConstants.ESIBase));
+            var builder = new UriBuilder(EveServerConfig.ESIBase);
             builder.Path = Path.Combine(builder.Path, path);
             if (page > 1)
                 builder.Query = "page=" + page.ToString(CultureConstants.InvariantCulture);

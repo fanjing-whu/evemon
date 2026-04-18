@@ -599,4 +599,26 @@
   <data name="FuzzworksMarketUrl" xml:space="preserve">
     <value>https://market.fuzzwork.co.uk/aggregates/?region=10000002&amp;types=</value>
   </data>
+  <!-- Chinese Server (Seren) ESI Configuration -->
+  <data name="ESISerenBase" xml:space="preserve">
+    <value>https://esi.eve.com.cn</value>
+    <comment>ESI base URL for Chinese Seren server</comment>
+  </data>
+  <data name="SSOSerenBase" xml:space="preserve">
+    <value>https://login.eve.com.cn</value>
+    <comment>SSO base URL for Chinese Seren server</comment>
+  </data>
+  <data name="SSOSerenBaseV2" xml:space="preserve">
+    <value>https://login.eve.com.cn/v2/oauth/</value>
+    <comment>SSO v2 base URL for Chinese Seren server</comment>
+  </data>
+  <data name="EVEImageServerBaseSeren" xml:space="preserve">
+    <value>https://images.eve.com</value>
+    <comment>Image server base for Chinese Seren server</comment>
+  </data>
+  <!-- Chinese Server Datafiles URL -->
+  <data name="DatafilesSerenBase" xml:space="preserve">
+    <value>https://esi.eve.com.cn</value>
+    <comment>Datafiles base URL for Chinese Seren server (placeholder - actual URL depends on where NetEase hosts the files)</comment>
+  </data>
 </root>

@@ -9,10 +9,12 @@ using System.Xml.Xsl;
 using EVEMon.Common.Attributes;
 using EVEMon.Common.CloudStorageServices;
 using EVEMon.Common.Collections;
+using EVEMon.Common.Enumerations;
 using EVEMon.Common.Enumerations.CCPAPI;
 using EVEMon.Common.Enumerations.UISettings;
 using EVEMon.Common.Extensions;
 using EVEMon.Common.Helpers;
+using EVEMon.Common.Models;
 using EVEMon.Common.Models.Extended;
 using EVEMon.Common.Notifications;
 using EVEMon.Common.Scheduling;
@@ -39,6 +41,7 @@ namespace EVEMon.Common
         {
             SSOClientID = string.Empty;
             SSOClientSecret = string.Empty;
+            ServerType = EveServerType.Tranquility;
             UI = new UISettings();
             Proxy = new ProxySettings();
             Updates = new UpdateSettings();
@@ -80,6 +83,16 @@ namespace EVEMon.Common
         /// Gets or sets the SSO secret key.
         /// </summary>
         public static string SSOClientSecret { get; private set; }
+
+        /// <summary>
+        /// Gets or sets the compatibility mode.
+        /// </summary>
+        public static CompatibilityMode Compatibility { get; private set; }
+
+        /// <summary>
+        /// Gets or sets the EVE server type.
+        /// </summary>
+        public static EveServerType ServerType { get; private set; }
 
         /// <summary>
         /// Gets the settings for updates.
@@ -182,6 +195,9 @@ namespace EVEMon.Common
                 // API settings
                 SSOClientID = s_settings.SSOClientID ?? string.Empty;
                 SSOClientSecret = s_settings.SSOClientSecret ?? string.Empty;
+
+                // Server type
+                ServerType = s_settings.ServerType;
 
                 // User settings
                 UI = s_settings.UI;
@@ -343,6 +359,8 @@ namespace EVEMon.Common
                 SSOClientID = SSOClientID,
                 SSOClientSecret = SSOClientSecret,
                 Revision = Revision,
+                Compatibility = Compatibility,
+                ServerType = ServerType,
                 Scheduler = Scheduler.Export(),
                 Calendar = Calendar,
                 CloudStorageServiceProvider = CloudStorageServiceProvider,

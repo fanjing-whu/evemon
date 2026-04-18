@@ -126,6 +126,9 @@ namespace EVEMon.SettingsUI
             cbHighlightPlannedSkills = new System.Windows.Forms.CheckBox();
             networkPage = new MultiPanelPage();
             esiSettingsGroupBox = new System.Windows.Forms.GroupBox();
+            serverTypeGroupBox = new System.Windows.Forms.GroupBox();
+            lblServerType = new System.Windows.Forms.Label();
+            serverTypeComboBox = new System.Windows.Forms.ComboBox();
             lblClientSecret = new System.Windows.Forms.Label();
             lblClientID = new System.Windows.Forms.Label();
             esiSettingsLabel = new System.Windows.Forms.LinkLabel();
@@ -1242,6 +1245,7 @@ namespace EVEMon.SettingsUI
             // 
             // networkPage
             // 
+            networkPage.Controls.Add(serverTypeGroupBox);
             networkPage.Controls.Add(esiSettingsGroupBox);
             networkPage.Controls.Add(ProxyServerGroupBox);
             networkPage.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -1253,6 +1257,39 @@ namespace EVEMon.SettingsUI
             networkPage.Text = "networkPage";
             networkPage.Visible = false;
             // 
+            // serverTypeGroupBox
+            // 
+            serverTypeGroupBox.Controls.Add(lblServerType);
+            serverTypeGroupBox.Controls.Add(serverTypeComboBox);
+            serverTypeGroupBox.Location = new System.Drawing.Point(4, 4);
+            serverTypeGroupBox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            serverTypeGroupBox.Name = "serverTypeGroupBox";
+            serverTypeGroupBox.Padding = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            serverTypeGroupBox.Size = new System.Drawing.Size(477, 60);
+            serverTypeGroupBox.TabIndex = 3;
+            serverTypeGroupBox.TabStop = false;
+            serverTypeGroupBox.Text = "EVE Server";
+            // 
+            // lblServerType
+            // 
+            lblServerType.AutoSize = true;
+            lblServerType.Location = new System.Drawing.Point(10, 28);
+            lblServerType.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            lblServerType.Name = "lblServerType";
+            lblServerType.Size = new System.Drawing.Size(82, 15);
+            lblServerType.TabIndex = 0;
+            lblServerType.Text = "Server Type:";
+            // 
+            // serverTypeComboBox
+            // 
+            serverTypeComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            serverTypeComboBox.FormattingEnabled = true;
+            serverTypeComboBox.Location = new System.Drawing.Point(96, 25);
+            serverTypeComboBox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            serverTypeComboBox.Name = "serverTypeComboBox";
+            serverTypeComboBox.Size = new System.Drawing.Size(200, 23);
+            serverTypeComboBox.TabIndex = 1;
+            // 
             // esiSettingsGroupBox
             // 
             esiSettingsGroupBox.Controls.Add(lblClientSecret);
@@ -1260,7 +1297,7 @@ namespace EVEMon.SettingsUI
             esiSettingsGroupBox.Controls.Add(esiSettingsLabel);
             esiSettingsGroupBox.Controls.Add(clientSecretTextBox);
             esiSettingsGroupBox.Controls.Add(clientIDTextBox);
-            esiSettingsGroupBox.Location = new System.Drawing.Point(4, 224);
+            esiSettingsGroupBox.Location = new System.Drawing.Point(4, 68);
             esiSettingsGroupBox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             esiSettingsGroupBox.Name = "esiSettingsGroupBox";
             esiSettingsGroupBox.Padding = new System.Windows.Forms.Padding(4, 3, 4, 3);
@@ -2382,6 +2419,9 @@ namespace EVEMon.SettingsUI
         private System.Windows.Forms.Label lblSkillQueueWarningThresholdDays;
         private System.Windows.Forms.Label lblSkillQueuWarningThreshold;
         private System.Windows.Forms.CheckBox cbShowSkillpointsOnOverview;
+        private System.Windows.Forms.GroupBox serverTypeGroupBox;
+        private System.Windows.Forms.Label lblServerType;
+        private System.Windows.Forms.ComboBox serverTypeComboBox;
         private System.Windows.Forms.GroupBox esiSettingsGroupBox;
         private System.Windows.Forms.TextBox clientIDTextBox;
         private System.Windows.Forms.LinkLabel esiSettingsLabel;

@@ -1,6 +1,7 @@
 ﻿using EVEMon.Common.Constants;
 using EVEMon.Common.Extensions;
 using EVEMon.Common.Helpers;
+using EVEMon.Common.Models;
 using EVEMon.Common.Net;
 using EVEMon.Common.Serialization;
 using EVEMon.Common.Serialization.Esi;
@@ -123,7 +124,7 @@ namespace EVEMon.Common.Service
         private void FetchToken(string data, Action<AccessResponse> callback, bool isJWT)
         {
             var obtained = DateTime.UtcNow;
-            var url = new Uri(NetworkConstants.SSOBaseV2 + NetworkConstants.SSOToken);
+            var url = new Uri(EveServerConfig.SSOBaseV2 + NetworkConstants.SSOToken);
             var rp = new RequestParams()
             {
                 Content = data,
@@ -174,7 +175,7 @@ namespace EVEMon.Common.Service
             else
                 url = string.Format(NetworkConstants.SSOLogin, WebUtility.UrlEncode(redirect),
                     state, m_scopes, m_clientID);
-            return new Uri(NetworkConstants.SSOBaseV2 + url);
+            return new Uri(EveServerConfig.SSOBaseV2 + url);
         }
 
         /// <summary>
@@ -264,7 +265,7 @@ namespace EVEMon.Common.Service
                 }
                 if (token != null)
                 {
-                    var intendedURI = new Uri(NetworkConstants.SSOBaseV2);
+                    var intendedURI = EveServerConfig.SSOBaseV2;
                     string issuer = token.Issuer;
                     // Validate ISSuer
                     if (issuer == intendedURI.Host || issuer == intendedURI.GetLeftPart(

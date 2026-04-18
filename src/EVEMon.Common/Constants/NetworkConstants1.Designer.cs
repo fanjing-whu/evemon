@@ -1067,6 +1067,51 @@ namespace EVEMon.Common.Constants {
                 return ResourceManager.GetString("GlobalNTPPool", resourceCulture);
             }
         }
+
+        /// <summary>
+        ///   Looks up a localized string similar to https://images.eve.com.
+        /// </summary>
+        public static string EVEImageServerBaseSeren {
+            get {
+                return ResourceManager.GetString("EVEImageServerBaseSeren", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to https://esi.eve.com.cn.
+        /// </summary>
+        public static string ESISerenBase {
+            get {
+                return ResourceManager.GetString("ESISerenBase", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to https://login.eve.com.cn.
+        /// </summary>
+        public static string SSOSerenBase {
+            get {
+                return ResourceManager.GetString("SSOSerenBase", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to https://login.eve.com.cn/v2/oauth/.
+        /// </summary>
+        public static string SSOSerenBaseV2 {
+            get {
+                return ResourceManager.GetString("SSOSerenBaseV2", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to https://esi.eve.com.cn.
+        /// </summary>
+        public static string DatafilesSerenBase {
+            get {
+                return ResourceManager.GetString("DatafilesSerenBase", resourceCulture);
+            }
+        }
         
         /// <summary>
         ///   Looks up a localized string similar to https://ssl.google-analytics.com/collect.

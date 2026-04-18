@@ -9,6 +9,7 @@ using System.Windows.Forms;
 using EVEMon.Common.Constants;
 using EVEMon.Common.Enumerations;
 using EVEMon.Common.Helpers;
+using EVEMon.Common.Models;
 using EVEMon.Common.Net;
 
 namespace EVEMon.Common.Service
@@ -21,7 +22,7 @@ namespace EVEMon.Common.Service
         /// <param name="path">The path.</param>
         /// <returns></returns>
         public static Uri GetImageServerBaseUri(string path) => new Uri(
-            NetworkConstants.EVEImageServerBase + path);
+            EveServerConfig.ImageServerBase + path);
 
         /// <summary>
         /// Asynchronously downloads a character portrait from its ID.
@@ -29,8 +30,7 @@ namespace EVEMon.Common.Service
         /// <param name="charId"></param>
         internal static async Task<Image> GetCharacterImageAsync(long charId)
         {
-            string path = string.Format(CultureConstants.InvariantCulture,
-                NetworkConstants.CCPPortraits, charId, (int)EveImageSize.x128);
+            string path = EveServerConfig.GetPortraitPath(charId, (int)EveImageSize.x128);
 
             return await GetImageAsync(GetImageServerBaseUri(path), false).ConfigureAwait(false);
         }
@@ -42,8 +42,7 @@ namespace EVEMon.Common.Service
         /// <param name="allianceID">The alliance ID.</param>
         public static Task GetAllianceImageAsync(PictureBox pictureBox, long allianceID)
         {
-            string path = string.Format(CultureConstants.InvariantCulture, NetworkConstants.
-                CCPAllianceLogo, allianceID, pictureBox.Width);
+            string path = EveServerConfig.GetAllianceLogoPath(allianceID, pictureBox.Width);
             return GetImageAsync(pictureBox, path);
         }
 
@@ -54,8 +53,7 @@ namespace EVEMon.Common.Service
         /// <param name="corporationID">The corporation ID.</param>
         public static Task GetCorporationImageAsync(PictureBox pictureBox, long corporationID)
         {
-            string path = string.Format(CultureConstants.InvariantCulture, NetworkConstants.
-                CCPCorporationLogo, corporationID, pictureBox.Width);
+            string path = EveServerConfig.GetCorporationLogoPath(corporationID, pictureBox.Width);
             return GetImageAsync(pictureBox, path);
         }
 

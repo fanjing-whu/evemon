@@ -7,8 +7,11 @@ using System.Linq;
 using System.Net;
 using System.Windows.Forms;
 using EVEMon.Common;
+using EVEMon.Common.Constants;
 using EVEMon.Common.Controls;
+using EVEMon.Common.Enumerations;
 using EVEMon.Common.Helpers;
+using EVEMon.Common.Models;
 using EVEMon.Common.Net;
 using EVEMon.Common.Serialization.PatchXml;
 using EVEMon.Common.Threading;
@@ -229,7 +232,9 @@ namespace EVEMon.Updater
             /// </summary>
             private void BeginDownload()
             {
-                Uri url = new Uri($"{m_datafile.Address}/{m_datafile.Name}");
+                // Get the download address, adjusted for server type if using Seren
+                string address = GetServerSpecificAddress(m_datafile.Address);
+                Uri url = new Uri($"{address}/{m_datafile.Name}");
                 string urlValidationError;
                 if (!HttpWebClientService.IsValidURL(url, out urlValidationError))
                     return;
@@ -263,6 +268,24 @@ namespace EVEMon.Updater
                     ExceptionHandler.LogRethrowException(ex);
                     throw;
                 }
+            }
+
+            /// <summary>
+            /// Gets the server-specific download address for the datafile.
+            /// For Seren (Chinese server), replaces the base address with the Chinese server URL.
+            /// </summary>
+            /// <param name="originalAddress">The original address from the patch XML.</param>
+            /// <returns>The server-specific address.</returns>
+            private string GetServerSpecificAddress(string originalAddress)
+            {
+                if (Settings.ServerType != EveServerType.Seren)
+                    return originalAddress;
+
+                // For Seren, use the Chinese server datafiles URL
+                // The originalAddress is typically something like https://https://https://images.evetech.net/...
+                // We replace it with the Seren equivalent
+                // Note: This is a placeholder - actual Seren datafiles location may vary
+                return NetworkConstants.DatafilesSerenBase;
             }
 
             /// <summary>
