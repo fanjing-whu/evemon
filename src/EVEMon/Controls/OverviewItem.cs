@@ -851,7 +851,9 @@ namespace EVEMon.Controls
                     }
                 }
                 // Use the actual font on the display
-                m_minWidth = (int)Math.Ceiling(g.MeasureString(longestSkill.Name + " " + Skill.
+                // Guard against empty skill list (can happen when SDE data fails to load)
+                string skillName = longestSkill?.Name ?? "Skill Name";
+                m_minWidth = (int)Math.Ceiling(g.MeasureString(skillName + " " + Skill.
                     GetRomanFromInt(3), lblSkillInTraining.Font).Width);
             }
             return m_minWidth;

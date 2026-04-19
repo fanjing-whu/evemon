@@ -1123,7 +1123,7 @@ namespace EVEMon.Common.Constants {
         }
 
         /// <summary>
-        ///   Looks up a localized string similar to http://localhost:4916/token_relay.htm.
+        ///   Looks up a localized string similar to https://ali-esi.evepc.163.com/ui/oauth2-redirect.html.
         /// </summary>
         public static string SSOSerenRedirect {
             get {
@@ -1132,11 +1132,20 @@ namespace EVEMon.Common.Constants {
         }
 
         /// <summary>
-        ///   Looks up a localized string similar to authorize/?response_type=token&amp;redirect_uri={0}&amp;client_id={3}&amp;scope={2}&amp;state={1}&amp;realm=ESI&amp;device_id={4}.
+        ///   Looks up a localized string similar to v2/oauth/authorize/?response_type=code&amp;redirect_uri={0}&amp;client_id={1}&amp;scope={2}&amp;state=hilltech&amp;device_id=eims.
         /// </summary>
         public static string SSOSerenImplicitLogin {
             get {
                 return ResourceManager.GetString("SSOSerenImplicitLogin", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to esi-skills.read_skills.v1 esi-skills.read_skillqueue.v1 esi-clones.read_clones.v1 esi-assets.read_assets.v1.
+        /// </summary>
+        public static string SSOSerenScopes {
+            get {
+                return ResourceManager.GetString("SSOSerenScopes", resourceCulture);
             }
         }
         

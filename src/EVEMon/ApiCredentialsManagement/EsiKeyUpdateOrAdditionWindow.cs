@@ -27,6 +27,7 @@ namespace EVEMon.ApiCredentialsManagement
         private ESIKeyCreationEventArgs m_creationArgs;
         private readonly SSOWebServerHttpListener m_server;
         private readonly string m_state;
+        private readonly bool m_isSeren;
 
         /// <summary>
         /// Constructor for new ESI credential.
@@ -36,8 +37,11 @@ namespace EVEMon.ApiCredentialsManagement
             InitializeComponent();
             m_keyValid = false;
             m_server = new SSOWebServerHttpListener();
-            m_state = DateTime.UtcNow.ToFileTime().ToString();
             m_authService = SSOAuthenticationService.GetInstance();
+            m_isSeren = EveServerConfig.CurrentServerType == EveServerType.Seren;
+            // For Seren server, use fixed state='hilltech' (Pyfa compatible)
+            // For other servers, use GUID for CSRF protection
+            m_state = m_isSeren ? "hilltech" : Guid.NewGuid().ToString();
         }
 
         /// <summary>
@@ -56,6 +60,10 @@ namespace EVEMon.ApiCredentialsManagement
         /// </summary>
         private async Task StartServerAsync()
         {
+            // For Seren server, we don't use local server due to redirect_uri whitelist restriction
+            if (m_isSeren)
+                return;
+
             try
             {
                 await m_server.StartAsync();
@@ -365,12 +373,33 @@ namespace EVEMon.ApiCredentialsManagement
         /// data.</param>
         private void ButtonESILogin_Click(object sender, EventArgs e)
         {
-            if (ModifierKeys.HasFlag(Keys.Shift)) {
-                if (m_authService != null)
+            if (m_authService == null)
+                return;
+
+            if (m_isSeren)
+            {
+                // Seren: Show manual copy/paste dialog
+                var authUrl = m_authService.GetAuthenticationURL(m_state, SSOWebServerHttpListener.PORT);
+                using (var dialog = new ManualTokenInputForm(authUrl.ToString(), m_state))
+                {
+                    if (dialog.ShowDialog(this) == DialogResult.OK && !string.IsNullOrEmpty(dialog.Token))
+                    {
+                        // Token received, verify it
+                        m_authService.VerifyAuthCode(dialog.Token, GoToResults);
+                        Throbber.State = ThrobberState.Rotating;
+                        Throbber.Visible = true;
+                    }
+                }
+            }
+            else
+            {
+                // Tranquility: Use local server
+                if (ModifierKeys.HasFlag(Keys.Shift))
                     Clipboard.SetText(m_authService.GetAuthenticationURL(m_state,
                         SSOWebServerHttpListener.PORT).ToString());
-            } else
-                m_authService?.SpawnBrowserForLogin(m_state, SSOWebServerHttpListener.PORT);
+                else
+                    m_authService.SpawnBrowserForLogin(m_state, SSOWebServerHttpListener.PORT);
+            }
         }
     }
 }

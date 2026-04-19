@@ -37,9 +37,10 @@ namespace EVEMon.Common.Service
             if (isSeren)
             {
                 // Seren server: Always use public client ID with Implicit Flow (no secret)
+                // Note: Seren has a limit of max 4 scopes per authorization request
                 authService = new SSOAuthenticationService(
                     NetworkConstants.SSOSerenDefaultAppID,
-                    null, NetworkConstants.SSOScopes, isSeren: true);
+                    null, NetworkConstants.SSOSerenScopes, isSeren: true);
             }
             else if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(secret))
             {
@@ -108,6 +109,11 @@ namespace EVEMon.Common.Service
         private readonly string m_codeChallenge;
 
         /// <summary>
+        /// The code verifier for PKCE (used by Seren Authorization Code Flow).
+        /// </summary>
+        private readonly string m_codeVerifier;
+
+        /// <summary>
         /// List of scopes that are to be used.
         /// </summary>
         private readonly string m_scopes;
@@ -137,6 +143,12 @@ namespace EVEMon.Common.Service
                 // PKCE code challenge only needed for non-Seren servers
                 var cc = RandomNumberGenerator.GetBytes(32);
                 m_codeChallenge = Util.URLSafeBase64(cc);
+            }
+            else
+            {
+                // Seren Authorization Code Flow also uses code_verifier
+                var cv = RandomNumberGenerator.GetBytes(32);
+                m_codeVerifier = Util.URLSafeBase64(cv);
             }
         }
 
@@ -193,11 +205,10 @@ namespace EVEMon.Common.Service
             string url;
             if (m_isSeren)
             {
-                // Seren: Implicit Flow with ESI redirect
-                string redirect = NetworkConstants.SSOSerenRedirect;
-                string deviceId = Guid.NewGuid().ToString("N");
+                // Seren: NetEase login flow (based on Pyfa's working implementation)
+                // Pyfa uses fixed state='hilltech', no double encoding, no game_id
                 url = string.Format(NetworkConstants.SSOSerenImplicitLogin,
-                    WebUtility.UrlEncode(redirect), state, m_scopes, m_clientID, deviceId);
+                    WebUtility.UrlEncode(NetworkConstants.SSOSerenRedirect), m_clientID, m_scopes);
                 return new Uri(EveServerConfig.SSOBase + url);
             }
 
@@ -231,22 +242,25 @@ namespace EVEMon.Common.Service
         /// <param name="callback">A callback to receive the new token.</param>
         public void GetNewToken(string refreshToken, Action<AccessResponse> callback)
         {
+            refreshToken.ThrowIfNull(nameof(refreshToken));
+
             if (m_isSeren)
             {
-                // Seren Implicit Flow does not support refresh token
-                Dispatcher.Invoke(() => callback?.Invoke(null));
+                // Seren: Authorization Code Flow supports refresh token
+                string data = string.Format(
+                    "grant_type=refresh_token&refresh_token={0}&client_id={1}",
+                    WebUtility.UrlEncode(refreshToken), m_clientID);
+                FetchToken(data, callback, false);
                 return;
             }
-            refreshToken.ThrowIfNull(nameof(refreshToken));
-            string data;
+
             if (string.IsNullOrEmpty(m_secret))
                 // PKCE
-                data = string.Format(NetworkConstants.PostDataRefreshPKCE, WebUtility.
-                    UrlEncode(refreshToken), m_clientID);
+                FetchToken(string.Format(NetworkConstants.PostDataRefreshPKCE, WebUtility.
+                    UrlEncode(refreshToken), m_clientID), callback, false);
             else
-                data = string.Format(NetworkConstants.PostDataRefreshToken, WebUtility.
-                    UrlEncode(refreshToken));
-            FetchToken(data, callback, false);
+                FetchToken(string.Format(NetworkConstants.PostDataRefreshToken, WebUtility.
+                    UrlEncode(refreshToken)), callback, false);
         }
 
         /// <summary>
@@ -260,27 +274,27 @@ namespace EVEMon.Common.Service
 
             if (m_isSeren)
             {
-                // Seren: Implicit Flow - the code is actually the access_token directly
-                var response = new AccessResponse
-                {
-                    AccessToken = authCode,
-                    RefreshToken = string.Empty,
-                    Obtained = DateTime.UtcNow
-                };
-                Dispatcher.Invoke(() => callback?.Invoke(response));
+                // Seren: Authorization Code Flow - exchange code for token via POST request
+                // Format: grant_type=authorization_code&code={code}&client_id={client_id}&redirect_uri={redirect_uri}&code_verifier={code_verifier}
+                // Reference: Pyfa sends code_verifier even for Seren
+                FetchToken(string.Format(
+                    "grant_type=authorization_code&code={0}&client_id={1}&redirect_uri={2}&code_verifier={3}",
+                    WebUtility.UrlEncode(authCode), m_clientID,
+                    WebUtility.UrlEncode(NetworkConstants.SSOSerenRedirect),
+                    m_codeVerifier), callback, false);
                 return;
             }
 
             bool isPKCE = string.IsNullOrEmpty(m_secret);
-            string data;
+            string postData;
             if (isPKCE)
                 // PKCE
-                data = string.Format(NetworkConstants.PostDataAuthPKCE, WebUtility.UrlEncode(
+                postData = string.Format(NetworkConstants.PostDataAuthPKCE, WebUtility.UrlEncode(
                     authCode), m_clientID, m_codeChallenge);
             else
-                data = string.Format(NetworkConstants.PostDataAuthToken, WebUtility.
+                postData = string.Format(NetworkConstants.PostDataAuthToken, WebUtility.
                     UrlEncode(authCode));
-            FetchToken(data, callback, isPKCE);
+            FetchToken(postData, callback, isPKCE);
         }
 
         /// <summary>

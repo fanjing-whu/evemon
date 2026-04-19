@@ -623,19 +623,25 @@
     <value>https://ali-esi.evepc.163.com</value>
     <comment>Datafiles base URL for Chinese Seren server (ESI endpoint for C1 solution)</comment>
   </data>
-  <!-- Chinese Server OAuth Implicit Flow Configuration -->
-  <!-- Updated: 2026-04-19 - Based on sodacooky blog research -->
-  <!-- SSO endpoint: /v2/oauth/authorize (NOT /authorize) -->
+  <!-- Chinese Server OAuth Configuration -->
+  <!-- Updated: 2026-04-19 - Based on Pyfa's working implementation (esiAccess.py) -->
+  <!-- Pyfa uses standard /v2/oauth/authorize endpoint with fixed state='hilltech' -->
   <data name="SSOSerenDefaultAppID" xml:space="preserve">
     <value>bc90aa496a404724a93f41b4f4e97761</value>
-    <comment>Public Client ID for Seren server (Implicit Flow)</comment>
+    <comment>Public Client ID for Seren server (from Pyfa config)</comment>
   </data>
   <data name="SSOSerenRedirect" xml:space="preserve">
-    <value>http://localhost:4916/token_relay.htm</value>
-    <comment>Redirect URI for Seren server - local relay page</comment>
+    <value>https://ali-esi.evepc.163.com/ui/oauth2-redirect.html</value>
+    <comment>Callback URL for Seren server (from Pyfa config)</comment>
   </data>
   <data name="SSOSerenImplicitLogin" xml:space="preserve">
-    <value>v2/oauth/authorize/?response_type=token&amp;redirect_uri={0}&amp;client_id={3}&amp;scope={2}&amp;state={1}&amp;realm=ESI&amp;device_id={4}</value>
-    <comment>Implicit Flow login template for Seren server (path: v2/oauth/authorize)</comment>
+    <value>v2/oauth/authorize/?response_type=code&amp;redirect_uri={0}&amp;client_id={1}&amp;scope={2}&amp;state=hilltech&amp;device_id=eims</value>
+    <comment>Seren server login template (Pyfa format: standard OAuth with fixed state)</comment>
+  </data>
+  <!-- Seren server has a limit of max 4 scopes per authorization request -->
+  <!-- Using only essential scopes for EVEMon functionality -->
+  <data name="SSOSerenScopes" xml:space="preserve">
+    <value>esi-skills.read_skills.v1 esi-skills.read_skillqueue.v1 esi-clones.read_clones.v1 esi-assets.read_assets.v1</value>
+    <comment>Seren server OAuth scopes (max 4 per request)</comment>
   </data>
 </root>
