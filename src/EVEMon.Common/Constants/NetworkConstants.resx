@@ -639,9 +639,9 @@
     <comment>Seren server login template (Pyfa format: standard OAuth with fixed state)</comment>
   </data>
   <!-- Seren server has a limit of max 4 scopes per authorization request -->
-  <!-- Using only essential scopes for EVEMon functionality -->
+  <!-- Using Pyfa's working scopes for compatibility -->
   <data name="SSOSerenScopes" xml:space="preserve">
-    <value>esi-skills.read_skills.v1 esi-skills.read_skillqueue.v1 esi-clones.read_clones.v1 esi-assets.read_assets.v1</value>
-    <comment>Seren server OAuth scopes (max 4 per request)</comment>
+    <value>esi-skills.read_skills.v1 esi-fittings.read_fittings.v1 esi-fittings.write_fittings.v1</value>
+    <comment>Seren server OAuth scopes (Pyfa compatible)</comment>
   </data>
 </root>
