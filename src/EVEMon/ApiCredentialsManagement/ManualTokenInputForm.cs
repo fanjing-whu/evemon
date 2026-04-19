@@ -75,6 +75,14 @@ namespace EVEMon.ApiCredentialsManagement
         /// <param name="e">The <see cref="System.EventArgs"/> instance containing the event data.</param>
         private void openBrowserButton_Click(object sender, EventArgs e)
         {
+            // Seren server: Must clear old session first (Pyfa compatible flow)
+            // See: https://login.evepc.163.com/account/logoff
+            Util.OpenURL(new Uri(@"https://login.evepc.163.com/account/logoff"));
+            
+            // Delay before opening auth URL (Pyfa uses time.sleep(1))
+            System.Threading.Thread.Sleep(1000);
+            
+            // Then open the auth URL
             Util.OpenURL(new Uri(m_authUrl));
         }
 
