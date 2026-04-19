@@ -623,4 +623,19 @@
     <value>https://ali-esi.evepc.163.com</value>
     <comment>Datafiles base URL for Chinese Seren server (ESI endpoint for C1 solution)</comment>
   </data>
+  <!-- Chinese Server OAuth Implicit Flow Configuration -->
+  <!-- Updated: 2026-04-19 - Based on sodacooky blog research -->
+  <!-- SSO endpoint: /v2/oauth/authorize (NOT /authorize) -->
+  <data name="SSOSerenDefaultAppID" xml:space="preserve">
+    <value>bc90aa496a404724a93f41b4f4e97761</value>
+    <comment>Public Client ID for Seren server (Implicit Flow)</comment>
+  </data>
+  <data name="SSOSerenRedirect" xml:space="preserve">
+    <value>http://localhost:4916/token_relay.htm</value>
+    <comment>Redirect URI for Seren server - local relay page</comment>
+  </data>
+  <data name="SSOSerenImplicitLogin" xml:space="preserve">
+    <value>v2/oauth/authorize/?response_type=token&amp;redirect_uri={0}&amp;client_id={3}&amp;scope={2}&amp;state={1}&amp;realm=ESI&amp;device_id={4}</value>
+    <comment>Implicit Flow login template for Seren server (path: v2/oauth/authorize)</comment>
+  </data>
 </root>

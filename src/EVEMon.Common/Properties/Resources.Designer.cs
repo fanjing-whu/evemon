@@ -125,6 +125,18 @@ namespace EVEMon.Common.Properties {
                 return ResourceManager.GetString("CallbackOK", resourceCulture);
             }
         }
+
+        /// <summary>
+        ///   Looks up a localized string similar to &lt;!DOCTYPE html&gt;
+        /// &lt;html lang="zh-CN"&gt;
+        /// &lt;head&gt;
+        /// ...
+        /// &lt;/summary&gt;
+        public static string TokenRelay {
+            get {
+                return ResourceManager.GetString("TokenRelay", resourceCulture);
+            }
+        }
         
         /// <summary>
         ///   Looks up a localized string similar to factionID,factionName,description,raceIDs,solarSystemID,corporationID,sizeFactor,stationCount,stationSystemCount,militiaCorporationID,iconID

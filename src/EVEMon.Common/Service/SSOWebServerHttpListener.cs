@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -66,6 +67,60 @@ namespace EVEMon.Common.Service
             listener = builder.Build();
 
             listener.MapGet("/callback", HandleCallbackAsync);
+            listener.MapPost("/token", HandleToken);
+            listener.MapGet("/token_relay.htm", HandleTokenRelay);
+        }
+
+        /// <summary>
+        /// Serves the token relay HTML page for Seren Implicit Flow.
+        /// This page is loaded by the external browser, reads the access_token from URL fragment,
+        /// and posts it back to the local /token endpoint.
+        /// </summary>
+        private static byte[] s_tokenRelayHtml;
+
+        private async Task HandleTokenRelay(HttpContext context)
+        {
+            if (s_tokenRelayHtml == null)
+                s_tokenRelayHtml = Encoding.UTF8.GetBytes(Properties.Resources.TokenRelay);
+
+            context.Response.ContentType = "text/html; charset=utf-8";
+            context.Response.StatusCode = 200;
+            await context.Response.BodyWriter.WriteAsync(s_tokenRelayHtml);
+        }
+
+        /// <summary>
+        /// Handles POST /token requests from the redirect HTML page.
+        /// Receives the access_token from the relay page and completes the auth flow.
+        /// </summary>
+        private async Task HandleToken(HttpContext context, [FromBody] TokenPostData data)
+        {
+            if (data == null || string.IsNullOrEmpty(data.access_token))
+            {
+                context.Response.StatusCode = 400;
+                await context.Response.WriteAsync("Missing access_token");
+                return;
+            }
+
+            if (codeCompletionSource != null)
+            {
+                // Pass the token as 'code' to maintain compatibility with existing auth flow
+                codeCompletionSource.TrySetResult((data.access_token, data.state ?? string.Empty));
+            }
+
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/html";
+            await context.Response.WriteAsync(Properties.Resources.CallbackOK);
+        }
+
+        /// <summary>
+        /// Data class for the /token POST endpoint.
+        /// </summary>
+        private class TokenPostData
+        {
+            public string access_token { get; set; }
+            public string state { get; set; }
+            public string token_type { get; set; }
+            public int? expires_in { get; set; }
         }
 
         private Task HandleCallbackAsync(HttpContext context, [FromQuery] string code, [FromQuery] string state)

@@ -1112,6 +1112,33 @@ namespace EVEMon.Common.Constants {
                 return ResourceManager.GetString("DatafilesSerenBase", resourceCulture);
             }
         }
+
+        /// <summary>
+        ///   Looks up a localized string similar to bc90aa496a404724a93f41b4f4e97761.
+        /// </summary>
+        public static string SSOSerenDefaultAppID {
+            get {
+                return ResourceManager.GetString("SSOSerenDefaultAppID", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to http://localhost:4916/token_relay.htm.
+        /// </summary>
+        public static string SSOSerenRedirect {
+            get {
+                return ResourceManager.GetString("SSOSerenRedirect", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to authorize/?response_type=token&amp;redirect_uri={0}&amp;client_id={3}&amp;scope={2}&amp;state={1}&amp;realm=ESI&amp;device_id={4}.
+        /// </summary>
+        public static string SSOSerenImplicitLogin {
+            get {
+                return ResourceManager.GetString("SSOSerenImplicitLogin", resourceCulture);
+            }
+        }
         
         /// <summary>
         ///   Looks up a localized string similar to https://ssl.google-analytics.com/collect.

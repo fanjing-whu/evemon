@@ -1,4 +1,5 @@
 ﻿using EVEMon.Common.Constants;
+using EVEMon.Common.Enumerations;
 using EVEMon.Common.Extensions;
 using EVEMon.Common.Helpers;
 using EVEMon.Common.Models;
@@ -29,15 +30,29 @@ namespace EVEMon.Common.Service
         /// blank</returns>
         public static SSOAuthenticationService GetInstance()
         {
+            bool isSeren = EveServerConfig.CurrentServerType == EveServerType.Seren;
             string id = Settings.SSOClientID, secret = Settings.SSOClientSecret;
             SSOAuthenticationService authService;
 
-            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(secret))
+            if (isSeren)
+            {
+                // Seren server: Always use public client ID with Implicit Flow (no secret)
+                authService = new SSOAuthenticationService(
+                    NetworkConstants.SSOSerenDefaultAppID,
+                    null, NetworkConstants.SSOScopes, isSeren: true);
+            }
+            else if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(secret))
+            {
+                // Tranquility: Use default app with PKCE (no secret)
                 authService = new SSOAuthenticationService(NetworkConstants.SSODefaultAppID,
-                    null, NetworkConstants.SSOScopes);
+                    null, NetworkConstants.SSOScopes, isSeren: false);
+            }
             else
+            {
+                // Custom client ID (Tranquility only)
                 authService = new SSOAuthenticationService(id, secret, NetworkConstants.
-                    SSOScopes);
+                    SSOScopes, isSeren: false);
+            }
             return authService;
         }
 
@@ -102,17 +117,27 @@ namespace EVEMon.Common.Service
         /// </summary>
         private readonly string m_secret;
 
-        public SSOAuthenticationService(string clientID, string secret, string scopes)
+        /// <summary>
+        /// Whether this is Seren (Chinese) server using Implicit Flow.
+        /// </summary>
+        private readonly bool m_isSeren;
+
+        public SSOAuthenticationService(string clientID, string secret, string scopes, bool isSeren = false)
         {
             if (string.IsNullOrEmpty(clientID))
                 throw new ArgumentNullException("clientID");
             if (string.IsNullOrEmpty(scopes))
                 throw new ArgumentNullException("scopes");
             m_clientID = clientID;
-            var cc = RandomNumberGenerator.GetBytes(32);
-            m_codeChallenge = Util.URLSafeBase64(cc);
             m_scopes = scopes;
             m_secret = secret;
+            m_isSeren = isSeren;
+            if (!isSeren)
+            {
+                // PKCE code challenge only needed for non-Seren servers
+                var cc = RandomNumberGenerator.GetBytes(32);
+                m_codeChallenge = Util.URLSafeBase64(cc);
+            }
         }
 
         /// <summary>
@@ -165,15 +190,26 @@ namespace EVEMon.Common.Service
         /// <returns>The URL to be passed to a browser for login.</returns>
         public Uri GetAuthenticationURL(string state, int port)
         {
-            string redirect = string.Format(NetworkConstants.SSORedirect, port);
             string url;
+            if (m_isSeren)
+            {
+                // Seren: Implicit Flow with ESI redirect
+                string redirect = NetworkConstants.SSOSerenRedirect;
+                string deviceId = Guid.NewGuid().ToString("N");
+                url = string.Format(NetworkConstants.SSOSerenImplicitLogin,
+                    WebUtility.UrlEncode(redirect), state, m_scopes, m_clientID, deviceId);
+                return new Uri(EveServerConfig.SSOBase + url);
+            }
+
+            // Tranquility: Standard OAuth with PKCE
+            string localRedirect = string.Format(NetworkConstants.SSORedirect, port);
             if (string.IsNullOrEmpty(m_secret))
                 // PKCE
                 url = string.Format(NetworkConstants.SSOLoginPKCE, WebUtility.UrlEncode(
-                    redirect), state, m_scopes, m_clientID, Util.SHA256Base64(Encoding.ASCII.
+                    localRedirect), state, m_scopes, m_clientID, Util.SHA256Base64(Encoding.ASCII.
                     GetBytes(m_codeChallenge)));
             else
-                url = string.Format(NetworkConstants.SSOLogin, WebUtility.UrlEncode(redirect),
+                url = string.Format(NetworkConstants.SSOLogin, WebUtility.UrlEncode(localRedirect),
                     state, m_scopes, m_clientID);
             return new Uri(EveServerConfig.SSOBaseV2 + url);
         }
@@ -195,6 +231,12 @@ namespace EVEMon.Common.Service
         /// <param name="callback">A callback to receive the new token.</param>
         public void GetNewToken(string refreshToken, Action<AccessResponse> callback)
         {
+            if (m_isSeren)
+            {
+                // Seren Implicit Flow does not support refresh token
+                Dispatcher.Invoke(() => callback?.Invoke(null));
+                return;
+            }
             refreshToken.ThrowIfNull(nameof(refreshToken));
             string data;
             if (string.IsNullOrEmpty(m_secret))
@@ -210,11 +252,25 @@ namespace EVEMon.Common.Service
         /// <summary>
         /// Starts verifying the authentication code.
         /// </summary>
-        /// <param name="authCode">The code to verify.</param>
+        /// <param name="authCode">The code to verify (or access_token for Seren Implicit Flow).</param>
         /// <param name="callback">A callback to receive the tokens.</param>
         public void VerifyAuthCode(string authCode, Action<AccessResponse> callback)
         {
             authCode.ThrowIfNull(nameof(authCode));
+
+            if (m_isSeren)
+            {
+                // Seren: Implicit Flow - the code is actually the access_token directly
+                var response = new AccessResponse
+                {
+                    AccessToken = authCode,
+                    RefreshToken = string.Empty,
+                    Obtained = DateTime.UtcNow
+                };
+                Dispatcher.Invoke(() => callback?.Invoke(response));
+                return;
+            }
+
             bool isPKCE = string.IsNullOrEmpty(m_secret);
             string data;
             if (isPKCE)
