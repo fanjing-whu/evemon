@@ -1,3 +1,4 @@
+using EVEMon.Common.Constants;
 using EVEMon.Common.Enumerations;
 using EVEMon.Common.Extensions;
 using EVEMon.Common.Models;
@@ -10,6 +11,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Serialization;
 
 namespace EVEMon.Common.Service
 {
@@ -17,14 +19,8 @@ namespace EVEMon.Common.Service
     /// Downloads Static Data Export (SDE) data from ESI for the Chinese Seren server.
     /// This is the core component of the C1 solution (Pure ESI mode + Local Cache).
     ///
-    /// ESI pattern for universe data:
-    ///   - /v1/universe/categories/  → returns int[] of IDs, then fetch each /v1/universe/categories/{id}/
-    ///   - /v1/universe/groups/      → paged int[], then fetch each /v1/universe/groups/{id}/
-    ///   - /v1/universe/types/       → paged int[], then fetch each /v1/universe/types/{id}/
-    ///   - /v1/markets/groups/       → returns int[], then fetch each /v1/markets/groups/{id}/
-    ///   - /v1/dogma/attributes/     → paged int[], then fetch each /v1/dogma/attributes/{id}/
-    ///   - /v1/dogma/effects/        → paged int[], then fetch each /v1/dogma/effects/{id}/
-    ///   - Others (regions, constellations, systems, etc.) also return int[] lists.
+    /// Dual-cache system: Seren (primary) + Tranquility (fallback).
+    /// When Seren data is missing or slow, TQ data is used as fallback and cached for Seren.
     /// </summary>
     public static class ESISdeDownloader
     {
@@ -44,10 +40,7 @@ namespace EVEMon.Common.Service
             {
                 AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
             };
-            s_httpClient = new HttpClient(handler)
-            {
-                Timeout = s_defaultTimeout
-            };
+            s_httpClient = new HttpClient(handler) { Timeout = s_defaultTimeout };
         }
 
         /// <summary>
@@ -332,54 +325,143 @@ namespace EVEMon.Common.Service
         }
 
         /// <summary>
+        /// Controls fallback behavior when Seren ESI data is unavailable.
+        /// </summary>
+        public enum FallbackMode
+        {
+            /// <summary>Only use Seren ESI, no fallback.</summary>
+            SerenOnly,
+            /// <summary>Try Seren first, fall back to TQ if Seren fails or is slow.</summary>
+            FallbackToTQ
+        }
+
+        /// <summary>
         /// Fetches type details from ESI for a batch of type IDs.
-        /// Use this for on-demand loading of the specific types needed by converters
+        /// Uses on-demand loading for the specific types needed by converters
         /// (e.g., skill types referenced by groups), rather than downloading all 54k+ types upfront.
         /// Results are cached in memory for the lifetime of the process.
+        ///
+        /// Supports dual-cache fallback: when Seren data is missing/failed, TQ data is used as fallback
+        /// and cached for Seren so future lookups are faster.
         /// </summary>
         /// <param name="typeIds">The type IDs to fetch.</param>
         /// <param name="progress">Optional progress reporter (current, total, status).</param>
-        /// <param name="forceRefresh">If true, bypass any in-memory cache.</param>
+        /// <param name="forceRefresh">If true, bypass in-memory cache but keep TQ fallback.</param>
+        /// <param name="fallbackMode">Whether to fall back to TQ when Seren data is missing.</param>
         /// <returns>A dictionary mapping type_id to EsiType objects.</returns>
         public static async Task<Dictionary<int, EsiType>> FetchTypeDetailsAsync(
             IEnumerable<int> typeIds,
             IProgress<(int current, int total, string status)> progress = null,
-            bool forceRefresh = false)
+            bool forceRefresh = false,
+            FallbackMode fallbackMode = FallbackMode.SerenOnly)
         {
             var uniqueIds = typeIds.Distinct().ToList();
             if (uniqueIds.Count == 0)
                 return new Dictionary<int, EsiType>();
 
-            // Check in-memory cache first
-            if (!forceRefresh && s_typeDetailCache != null)
+            // Step 1: Check in-memory cache (never bypassed — always serves cached data)
+            var uncachedIds = new List<int>();
+            if (s_typeDetailCache != null)
             {
-                var uncached = uniqueIds.Where(id => !s_typeDetailCache.ContainsKey(id)).ToList();
-                if (uncached.Count == 0)
+                foreach (int id in uniqueIds)
                 {
-                    progress?.Report((uniqueIds.Count, uniqueIds.Count, $"Types loaded from cache ({uniqueIds.Count} items)"));
-                    return uniqueIds.ToDictionary(id => id, id => s_typeDetailCache[id]);
+                    if (!s_typeDetailCache.ContainsKey(id))
+                        uncachedIds.Add(id);
                 }
-                uniqueIds = uncached;
+            }
+            else
+            {
+                uncachedIds = uniqueIds;
             }
 
-            var baseUrl = EveServerConfig.ESIBase;
-            var detailPath = "/v1/universe/types/{0}/";
-            var fetched = new EsiType[uniqueIds.Count];
+            if (uncachedIds.Count == 0 && !forceRefresh)
+            {
+                progress?.Report((uniqueIds.Count, uniqueIds.Count, $"Types loaded from memory cache ({uniqueIds.Count} items)"));
+                return uniqueIds.ToDictionary(id => id, id => s_typeDetailCache[id]);
+            }
+
+            // Step 2: Try Seren ESI for uncached IDs
+            var serenFetched = await FetchTypeDetailsFromServerAsync(
+                uncachedIds, EveServerConfig.ESIBase, "serenity", s_httpClient, progress,
+                forceRefresh ? 0 : -1); // skipCacheIdx=-1 means don't check in-mem (already filtered)
+            var serenMissing = new List<int>();
+            for (int i = 0; i < uncachedIds.Count; i++)
+            {
+                if (serenFetched[i] == null && s_typeDetailCache != null && !s_typeDetailCache.ContainsKey(uncachedIds[i]))
+                    serenMissing.Add(uncachedIds[i]);
+            }
+
+            // Step 3: Fall back to TQ LOCAL resource if needed (no network requests)
+            if (fallbackMode == FallbackMode.FallbackToTQ && serenMissing.Count > 0)
+            {
+                EveMonClient.Trace($"Fallback: {serenMissing.Count} types not found in Seren, trying local TQ resource...");
+
+                // Try local TQ resource (eve-items-en-US.xml.gzip) — zero network cost
+                var tqLocal = await LoadTQTypeDetailsFromLocalResourceAsync();
+                if (tqLocal.Count > 0)
+                {
+                    if (s_typeDetailCache == null)
+                        s_typeDetailCache = new Dictionary<int, EsiType>();
+                    int localResolved = 0;
+                    foreach (int id in serenMissing.ToArray())
+                    {
+                        if (tqLocal.TryGetValue(id, out var localType))
+                        {
+                            s_typeDetailCache[id] = localType;
+                            localResolved++;
+                        }
+                    }
+                    EveMonClient.Trace($"Local TQ resource resolved {localResolved}/{serenMissing.Count} types");
+                }
+                else
+                {
+                    EveMonClient.Trace("No local TQ resource found, types remain unresolved");
+                }
+            }
+
+            // Step 4: Return all requested IDs
+            var result = new Dictionary<int, EsiType>();
+            foreach (int id in typeIds)
+            {
+                if (s_typeDetailCache != null && s_typeDetailCache.TryGetValue(id, out var cachedType))
+                    result[id] = cachedType;
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Internal: fetches a batch of type details from a specific ESI server.
+        /// </summary>
+        private static async Task<EsiType[]> FetchTypeDetailsFromServerAsync(
+            List<int> ids,
+            Uri baseUrl,
+            string datasource,
+            HttpClient httpClient,
+            IProgress<(int current, int total, string status)> progress,
+            int skipCacheIdx = -1)
+        {
+            var fetched = new EsiType[ids.Count];
             var sem = new SemaphoreSlim(DetailFetchConcurrency);
             int completed = 0;
-            var tasks = uniqueIds.Select(async (id, index) =>
+            var tasks = ids.Select(async (id, index) =>
             {
                 await sem.WaitAsync();
                 try
                 {
-                    var url = new Uri(baseUrl, string.Format(detailPath, id) + "?datasource=serenity");
+                    // Skip if already in memory cache (when called as secondary pass)
+                    if (skipCacheIdx >= 0 && s_typeDetailCache != null && s_typeDetailCache.ContainsKey(id))
+                    {
+                        return;
+                    }
+
+                    var url = new Uri(baseUrl, $"/v1/universe/types/{id}/?datasource={datasource}");
                     for (int retry = 0; retry < s_maxRetries; retry++)
                     {
                         try
                         {
                             using var req = new HttpRequestMessage(HttpMethod.Get, url);
                             req.Headers.Add("Accept", "application/json");
-                            using var resp = await s_httpClient.SendAsync(req);
+                            using var resp = await httpClient.SendAsync(req);
                             if (!resp.IsSuccessStatusCode)
                             {
                                 if (retry < s_maxRetries - 1)
@@ -404,9 +486,9 @@ namespace EVEMon.Common.Service
                 finally
                 {
                     var c = Interlocked.Increment(ref completed);
-                    if (c % 50 == 0 || c == uniqueIds.Count)
+                    if (progress != null && (c % 50 == 0 || c == ids.Count))
                     {
-                        progress?.Report((c, uniqueIds.Count, $"Fetching type details: {c}/{uniqueIds.Count}"));
+                        progress.Report((c, ids.Count, $"Fetching type details: {c}/{ids.Count}"));
                     }
                     sem.Release();
                 }
@@ -414,7 +496,7 @@ namespace EVEMon.Common.Service
 
             await Task.WhenAll(tasks);
 
-            // Update in-memory cache
+            // Update in-memory cache with successfully fetched types
             if (s_typeDetailCache == null)
                 s_typeDetailCache = new Dictionary<int, EsiType>();
             foreach (var type in fetched)
@@ -423,14 +505,23 @@ namespace EVEMon.Common.Service
                     s_typeDetailCache[type.type_id] = type;
             }
 
-            // Return all requested IDs (null for failed ones)
-            var result = new Dictionary<int, EsiType>();
-            foreach (int id in typeIds)
+            return fetched;
+        }
+
+        /// <summary>
+        /// Writes a single type detail to the Seren ESI cache (fire-and-forget).
+        /// </summary>
+        private static async Task CacheTypeDetailAsync(int typeId, EsiType type)
+        {
+            try
             {
-                if (s_typeDetailCache.TryGetValue(id, out var cached))
-                    result[id] = cached;
+                string json = JsonSerializer.Serialize(type);
+                await ESISdeCacheManager.WriteCacheAsync(
+                    $"type_detail_{typeId}",
+                    ESISdeCacheManager.SdeServer.Seren,
+                    json, "", DateTime.UtcNow.AddDays(7));
             }
-            return result;
+            catch { /* non-critical */ }
         }
 
         /// <summary>
@@ -452,6 +543,102 @@ namespace EVEMon.Common.Service
         /// In-memory cache for type details fetched on-demand.
         /// </summary>
         private static Dictionary<int, EsiType> s_typeDetailCache;
+
+        /// <summary>
+        /// In-memory cache for TQ type details loaded from local resources.
+        /// </summary>
+        private static Dictionary<int, EsiType> s_tqLocalResourceCache;
+
+        /// <summary>
+        /// Loads type details from the local TQ datafile (eve-items-en-US.xml.gzip).
+        /// This is used as a fallback when Seren ESI data is unavailable,
+        /// avoiding any network requests to TQ ESI.
+        /// Thread-safe, loaded only once on first use.
+        /// </summary>
+        /// <returns>A dictionary mapping type_id to EsiType objects.</returns>
+        private static async Task<Dictionary<int, EsiType>> LoadTQTypeDetailsFromLocalResourceAsync()
+        {
+            if (s_tqLocalResourceCache != null)
+                return s_tqLocalResourceCache;
+
+            var localCache = new Dictionary<int, EsiType>();
+            string[] possiblePaths = new[]
+            {
+                // Installed resources directory (normal install)
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "eve-items-en-US.xml.gzip"),
+                // %APPDATA% (copied by Datafile.GetFullPath)
+                Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "EVEMon", "eve-items-en-US.xml.gzip"),
+            };
+
+            foreach (string path in possiblePaths)
+            {
+                try
+                {
+                    if (!File.Exists(path))
+                        continue;
+
+                    EveMonClient.Trace($"Loading TQ type details from local resource: {path}");
+
+                    using var stream = File.OpenRead(path);
+                    using var gzipStream = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
+                    var serializer = new XmlSerializer(typeof(Serialization.Datafiles.ItemsDatafile));
+
+                    if (serializer.Deserialize(gzipStream) is Serialization.Datafiles.ItemsDatafile datafile)
+                    {
+                        foreach (var mg in datafile.MarketGroups)
+                        {
+                            CollectItemsFromMarketGroupRecursive(mg, localCache);
+                        }
+                    }
+
+                    EveMonClient.Trace($"Loaded {localCache.Count} type details from local TQ resource");
+                    s_tqLocalResourceCache = localCache;
+                    return localCache;
+                }
+                catch (Exception ex)
+                {
+                    EveMonClient.Trace($"Failed to load TQ resource from {path}: {ex.Message}");
+                }
+            }
+
+            EveMonClient.Trace("No local TQ resource found, TQ fallback will require network");
+            s_tqLocalResourceCache = localCache;
+            return localCache;
+        }
+
+        /// <summary>
+        /// Recursively collects items from a market group and its children into the target dictionary.
+        /// </summary>
+        private static void CollectItemsFromMarketGroupRecursive(
+            Serialization.Datafiles.SerializableMarketGroup mg,
+            Dictionary<int, EsiType> target)
+        {
+            if (mg == null)
+                return;
+            foreach (var item in mg.Items)
+            {
+                if (!target.ContainsKey(item.ID))
+                {
+                    target[item.ID] = new EsiType
+                    {
+                        type_id = item.ID,
+                        name = item.Name,
+                        description = item.Description ?? "",
+                        published = true,
+                        group_id = null,
+                        market_group_id = mg.ID,
+                        icon_id = null,
+                        portion_size = item.PortionSize > 0 ? item.PortionSize : 1
+                    };
+                }
+            }
+            foreach (var child in mg.SubGroups)
+            {
+                CollectItemsFromMarketGroupRecursive(child, target);
+            }
+        }
 
         /// <summary>
         /// Downloads a single page from an endpoint (legacy path for non-ID-list endpoints).

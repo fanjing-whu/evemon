@@ -130,7 +130,10 @@ namespace EVEMon.Common.Service
             }
 
             EveMonClient.Trace($"ESIToDatafileConverter: Fetching {allItemTypeIds.Count} item type details on-demand...");
-            var itemTypes = ESISdeDownloader.FetchTypeDetailsAsync(allItemTypeIds).GetAwaiter().GetResult();
+            var itemTypes = ESISdeDownloader.FetchTypeDetailsAsync(
+                allItemTypeIds,
+                null, false,
+                ESISdeDownloader.FallbackMode.FallbackToTQ).GetAwaiter().GetResult();
 
             // Build market group dictionary
             var serializableGroupDict = new Dictionary<int, SerializableMarketGroup>();
@@ -265,7 +268,10 @@ namespace EVEMon.Common.Service
 
             // Fetch type details on-demand (only the skill types referenced by groups, not all 54k+)
             EveMonClient.Trace($"ESIToDatafileConverter: Fetching {allSkillTypeIds.Count} skill type details on-demand...");
-            var skillTypes = ESISdeDownloader.FetchTypeDetailsAsync(allSkillTypeIds).GetAwaiter().GetResult();
+            var skillTypes = ESISdeDownloader.FetchTypeDetailsAsync(
+                allSkillTypeIds,
+                null, false,
+                ESISdeDownloader.FallbackMode.FallbackToTQ).GetAwaiter().GetResult();
 
             // Build lookup dictionary keyed by group_id
             var skillsByGroup = new Dictionary<int, List<ESISdeDownloader.EsiType>>();

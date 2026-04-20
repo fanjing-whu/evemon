@@ -153,28 +153,28 @@ namespace EVEMon.Common.Service
         private static async Task ConvertAndSaveDatafilesAsync()
         {
             ReportProgress(60, "Converting categories...");
-            string categoriesJson = await ESISdeCacheManager.ReadCacheAsync("universe_categories");
+            string categoriesJson = await ReadCacheWithFallbackAsync("universe_categories");
             if (string.IsNullOrEmpty(categoriesJson))
             {
                 categoriesJson = "[]";
             }
 
             ReportProgress(65, "Converting groups...");
-            string groupsJson = await ESISdeCacheManager.ReadCacheAsync("universe_groups");
+            string groupsJson = await ReadCacheWithFallbackAsync("universe_groups");
             if (string.IsNullOrEmpty(groupsJson))
             {
                 groupsJson = "[]";
             }
 
             ReportProgress(70, "Converting types...");
-            string typesJson = await ESISdeCacheManager.ReadCacheAsync("universe_types");
+            string typesJson = await ReadCacheWithFallbackAsync("universe_types");
             if (string.IsNullOrEmpty(typesJson))
             {
                 typesJson = "[]";
             }
 
             ReportProgress(75, "Converting market groups...");
-            string marketGroupsJson = await ESISdeCacheManager.ReadCacheAsync("market_groups");
+            string marketGroupsJson = await ReadCacheWithFallbackAsync("market_groups");
             if (string.IsNullOrEmpty(marketGroupsJson))
             {
                 marketGroupsJson = "[]";
@@ -188,7 +188,7 @@ namespace EVEMon.Common.Service
 
             // Convert to Skills datafile
             ReportProgress(82, "Creating skills datafile...");
-            string dogmaJson = await ESISdeCacheManager.ReadCacheAsync("dogma_attributes");
+            string dogmaJson = await ReadCacheWithFallbackAsync("dogma_attributes");
             if (string.IsNullOrEmpty(dogmaJson))
             {
                 dogmaJson = "[]";
@@ -197,6 +197,29 @@ namespace EVEMon.Common.Service
             ESIToDatafileConverter.SaveDatafileToCache(skillsDatafile, "eve-skills-esi.xml.gzip");
 
             EveMonClient.Trace("SerenDataLoader: Converted and saved datafiles");
+        }
+
+        /// <summary>
+        /// Reads cache with automatic TQ fallback.
+        /// Tries Seren cache first, then falls back to TQ cache (from local resources or TQ ESI).
+        /// </summary>
+        private static async Task<string> ReadCacheWithFallbackAsync(string endpoint)
+        {
+            // Try Seren first
+            var serenData = await ESISdeCacheManager.ReadCacheAsync(endpoint, ESISdeCacheManager.SdeServer.Seren);
+            if (!string.IsNullOrEmpty(serenData))
+            {
+                EveMonClient.Trace($"Using Seren cache for endpoint: {endpoint}");
+                return serenData;
+            }
+            // Fall back to TQ cache
+            var tqResult = await ESISdeCacheManager.ReadCacheWithFallbackAsync(endpoint);
+            if (tqResult.HasValue)
+            {
+                EveMonClient.Trace($"Using TQ fallback cache for endpoint: {endpoint} (server: {tqResult.Value.server})");
+                return tqResult.Value.data;
+            }
+            return null;
         }
 
         /// <summary>
