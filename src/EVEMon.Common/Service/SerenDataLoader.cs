@@ -31,7 +31,13 @@ namespace EVEMon.Common.Service
 
         /// <summary>
         /// Loads all static data for Seren mode.
-        /// Downloads from ESI if cache is missing or expired, otherwise loads from cache.
+        /// 
+        /// Non-blocking strategy:
+        /// 1. Check if ESI cache exists -> use it
+        /// 2. If no cache -> load from local TQ resource immediately (zero network)
+        /// 3. Background -> refresh ESI cache
+        /// 
+        /// This ensures UI never blocks on network operations.
         /// </summary>
         /// <param name="forceRefresh">If true, bypass cache and download fresh data.</param>
         /// <returns>True if all data loaded successfully.</returns>
@@ -47,43 +53,50 @@ namespace EVEMon.Common.Service
             {
                 ReportProgress(0, "Starting Seren data load...");
 
-                // Check if ESI is accessible
-                ReportProgress(5, "Checking ESI connectivity...");
-                bool esiAvailable = await ESISdeDownloader.CheckEsiAvailabilityAsync();
-                if (!esiAvailable)
+                // Step 1: Check if ESI cache has all required data
+                ReportProgress(5, "Checking ESI cache...");
+                bool hasCachedData = await CheckCachedDataAvailableAsync();
+                
+                if (hasCachedData && !forceRefresh)
                 {
-                    EveMonClient.Trace("SerenDataLoader: ESI is not accessible");
-                    ReportProgress(0, "Error: Cannot connect to ESI");
-                    return false;
+                    EveMonClient.Trace("SerenDataLoader: Using cached ESI data");
+                }
+                else
+                {
+                    // Step 2: No cache -> use local TQ resource immediately (zero network)
+                    EveMonClient.Trace("SerenDataLoader: No cache found, using local TQ resource");
+                    ReportProgress(10, "Loading from local TQ resource...");
+                    
+                    bool localLoaded = await LoadFromLocalTQResourceAsync();
+                    if (!localLoaded)
+                    {
+                        EveMonClient.Trace("SerenDataLoader: Local TQ resource not available, queuing ESI download");
+                        // Queue background ESI download
+                        QueueBackgroundESIDownload();
+                    }
+                    else
+                    {
+                        // Successfully loaded from local TQ, queue background refresh
+                        EveMonClient.Trace("SerenDataLoader: Loaded from local TQ, queuing background ESI refresh");
+                        QueueBackgroundESIDownload();
+                        
+                        ReportProgress(100, "Seren data load complete (from local TQ)");
+                        return true;
+                    }
                 }
 
-                // Download and cache all SDE data
-                ReportProgress(10, "Downloading SDE data from ESI...");
-                var downloadProgress = new Progress<(int current, int total, string status)>(
-                    p => ReportProgress(10 + p.current * 50 / p.total, p.status));
-                bool downloadSuccess = await ESISdeDownloader.DownloadAllSdeDataAsync(
-                    downloadProgress, forceRefresh);
-
-                if (!downloadSuccess)
-                {
-                    EveMonClient.Trace("SerenDataLoader: Failed to download some ESI data, continuing with partial data");
-                    // Continue with partial data if available
-                }
-
-                // Convert ESI data to datafile format and save to cache
-                ReportProgress(60, "Converting data to datafile format...");
-                await ConvertAndSaveDatafilesAsync();
-
-                // Convert and load data
-                ReportProgress(80, "Loading static data...");
+                // Step 3: Load from ESI cache
+                ReportProgress(60, "Loading static data from cache...");
                 bool loadSuccess = await LoadStaticDataAsync();
 
                 if (!loadSuccess)
                 {
                     EveMonClient.Trace("SerenDataLoader: Failed to load from ESI cache, trying fallback...");
-                    // Fallback to local datafiles will be handled in MainWindow
                     return false;
                 }
+
+                // Queue background refresh for next time
+                QueueBackgroundESIDownload();
 
                 ReportProgress(100, "Seren data load complete");
                 EveMonClient.Trace("SerenDataLoader: Load complete");
@@ -96,6 +109,137 @@ namespace EVEMon.Common.Service
                 ReportProgress(0, $"Error: {ex.Message}");
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Checks if all required ESI cached data is available.
+        /// </summary>
+        private static async Task<bool> CheckCachedDataAvailableAsync()
+        {
+            string[] requiredEndpoints = { "universe_categories", "universe_groups", "universe_types", "market_groups" };
+            foreach (var endpoint in requiredEndpoints)
+            {
+                var data = await ESISdeCacheManager.ReadCacheAsync(endpoint, ESISdeCacheManager.SdeServer.Seren);
+                if (string.IsNullOrEmpty(data))
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Loads data from local TQ resource (eve-items-en-US.xml.gzip).
+        /// This is the primary path when ESI cache is not available.
+        /// </summary>
+        private static async Task<bool> LoadFromLocalTQResourceAsync()
+        {
+            try
+            {
+                ReportProgress(15, "Loading TQ type details...");
+                var tqCache = await ESISdeDownloader.LoadTQTypeDetailsFromLocalResourceAsync();
+                if (tqCache.Count == 0)
+                {
+                    EveMonClient.Trace("SerenDataLoader: Local TQ resource not found");
+                    return false;
+                }
+
+                EveMonClient.Trace($"SerenDataLoader: Loaded {tqCache.Count} types from local TQ resource");
+
+                // Convert to Items datafile and load
+                ReportProgress(50, "Creating items datafile...");
+                var itemsDatafile = ConvertTQToItemsDatafile(tqCache);
+                
+                await Task.Run(() => Data.StaticItems.LoadFromDatafile(itemsDatafile));
+                GlobalDatafileCollection.OnDatafileLoaded();
+
+                // Load other static data (non-ESI)
+                ReportProgress(70, "Loading geography...");
+                await Task.Run(() => Data.StaticGeography.Load());
+                GlobalDatafileCollection.OnDatafileLoaded();
+
+                ReportProgress(80, "Loading certificates...");
+                await Task.Run(() => Data.StaticCertificates.Load());
+                GlobalDatafileCollection.OnDatafileLoaded();
+
+                ReportProgress(85, "Loading blueprints...");
+                await Task.Run(() => Data.StaticBlueprints.Load());
+                GlobalDatafileCollection.OnDatafileLoaded();
+
+                ReportProgress(90, "Loading skills...");
+                await Task.Run(() => Data.StaticSkills.Load());
+                GlobalDatafileCollection.OnDatafileLoaded();
+
+                ReportProgress(95, "Loading reprocessing...");
+                await Task.Run(() => Data.StaticReprocessing.Load());
+                GlobalDatafileCollection.OnDatafileLoaded();
+
+                ReportProgress(99, "Loading masteries...");
+                await Task.Run(() => Data.StaticMasteries.Load());
+                GlobalDatafileCollection.OnDatafileLoaded();
+
+                EveMonClient.Trace("SerenDataLoader: Loaded all data from local TQ resource");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                EveMonClient.Trace($"SerenDataLoader: Failed to load from local TQ: {ex.Message}");
+                ExceptionHandler.LogException(ex, false);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Converts TQ type cache to Items datafile format.
+        /// </summary>
+        private static Serialization.Datafiles.ItemsDatafile ConvertTQToItemsDatafile(Dictionary<int, ESISdeDownloader.EsiType> tqCache)
+        {
+            var datafile = new Serialization.Datafiles.ItemsDatafile();
+            var rootGroup = new Serialization.Datafiles.SerializableMarketGroup
+            {
+                ID = 0,
+                Name = "Root"
+            };
+            
+            // Group types by market_group_id
+            var groups = tqCache.Values
+                .Where(t => t.market_group_id.HasValue)
+                .GroupBy(t => t.market_group_id.Value)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            // Add items to the root (simplified - no proper hierarchy)
+            foreach (var type in tqCache.Values)
+            {
+                var item = new Serialization.Datafiles.SerializableItem
+                {
+                    ID = type.type_id,
+                    Name = type.name,
+                    Description = type.description ?? "",
+                    PortionSize = type.portion_size ?? 1
+                };
+                rootGroup.Items.Add(item);
+            }
+
+            datafile.MarketGroups.Add(rootGroup);
+            return datafile;
+        }
+
+        /// <summary>
+        /// Queues background ESI data download (fire-and-forget).
+        /// </summary>
+        private static void QueueBackgroundESIDownload()
+        {
+            EveMonClient.Trace("SerenDataLoader: Queuing background ESI download");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await ESISdeDownloader.DownloadAllSdeDataAsync();
+                    EveMonClient.Trace("SerenDataLoader: Background ESI download completed");
+                }
+                catch (Exception ex)
+                {
+                    EveMonClient.Trace($"SerenDataLoader: Background ESI download failed: {ex.Message}");
+                }
+            });
         }
 
         /// <summary>
