@@ -154,11 +154,23 @@ namespace EVEMon.Common.Models
                 CultureConstants.InvariantCulture) : data.GetData;
             string path = string.Format(GetESIMethod(requestMethod).Path, id, paramStr);
             
-            // Build the URI
+            // Build the URI - use string concat to avoid Path.Combine introducing backslashes
             var builder = new UriBuilder(EveServerConfig.ESIBase);
-            builder.Path = Path.Combine(builder.Path, path);
+            // Ensure path starts with /
+            if (!path.StartsWith("/"))
+                path = "/" + path;
+            builder.Path = path;
+
+            // Build query string
+            var queryParts = new System.Collections.Generic.List<string>();
             if (page > 1)
-                builder.Query = "page=" + page.ToString(CultureConstants.InvariantCulture);
+                queryParts.Add("page=" + page.ToString(CultureConstants.InvariantCulture));
+            // Add datasource for Seren server
+            if (EveServerConfig.CurrentServerType == EVEMon.Common.Enumerations.EveServerType.Seren)
+                queryParts.Add("datasource=serenity");
+            if (queryParts.Count > 0)
+                builder.Query = string.Join("&", queryParts);
+
             return builder.Uri;
         }
 

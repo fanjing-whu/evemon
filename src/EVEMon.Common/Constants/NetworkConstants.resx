@@ -614,8 +614,8 @@
     <comment>SSO v2 base URL for Chinese Seren server (migrated April 2026)</comment>
   </data>
   <data name="EVEImageServerBaseSeren" xml:space="preserve">
-    <value>https://images.evepc.163.com</value>
-    <comment>Image server base for Chinese Seren server (migrated April 2026)</comment>
+    <value>https://image.evepc.163.com</value>
+    <comment>Image server base for Chinese Seren server (image.evepc.163.com, NOT images)</comment>
   </data>
   <!-- Chinese Server Datafiles URL -->
   <!-- Updated: 2026-04-19 - Using ESI base for datafiles (C1 solution: Pure ESI mode + local cache) -->
@@ -639,9 +639,9 @@
     <comment>Seren server login template (Pyfa format: standard OAuth with fixed state)</comment>
   </data>
   <!-- Seren server has a limit of max 4 scopes per authorization request -->
-  <!-- Using Pyfa's working scopes for compatibility -->
+  <!-- Verified working: skills + skillqueue + clones + assets (4 scopes) -->
   <data name="SSOSerenScopes" xml:space="preserve">
-    <value>esi-skills.read_skills.v1 esi-fittings.read_fittings.v1 esi-fittings.write_fittings.v1</value>
-    <comment>Seren server OAuth scopes (Pyfa compatible)</comment>
+    <value>esi-skills.read_skills.v1 esi-skills.read_skillqueue.v1 esi-clones.read_clones.v1 esi-assets.read_assets.v1</value>
+    <comment>Seren server OAuth scopes - these 4 work; 5+ causes empty page error</comment>
   </data>
 </root>

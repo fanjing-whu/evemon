@@ -9,6 +9,7 @@ using EVEMon.Common.Constants;
 using EVEMon.Common.Data;
 using EVEMon.Common.Enumerations;
 using EVEMon.Common.Factories;
+using EVEMon.Common.Models;
 using EVEMon.Common.Service;
 
 namespace EVEMon.Common.Controls
@@ -275,9 +276,10 @@ namespace EVEMon.Common.Controls
         private Uri GetImageUrl()
         {
             int size = (int)m_imageSize;
-            string path = string.Format(CultureConstants.InvariantCulture, (size > 64 ?
-                NetworkConstants.CCPTypeRender : NetworkConstants.CCPTypeImage), m_item.ID,
-                size);
+            // Use EveServerConfig to get the correct path with proper tenant (tranquility/serenity)
+            string path = size > 64
+                ? EveServerConfig.GetTypeRenderPath(m_item.ID, size)
+                : EveServerConfig.GetTypeIconPath(m_item.ID, size);
             return ImageService.GetImageServerBaseUri(path);
         }
 

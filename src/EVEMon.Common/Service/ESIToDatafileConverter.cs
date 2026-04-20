@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Xml.Serialization;
@@ -29,7 +30,8 @@ namespace EVEMon.Common.Service
         }
 
         /// <summary>
-        /// Represents a group from ESI.
+        /// Represents a group from ESI (/v1/universe/groups/{id}/).
+        /// Note: ESI returns "types" (list of type IDs in this group), not "type_ids".
         /// </summary>
         private class EsiGroup
         {
@@ -37,6 +39,7 @@ namespace EVEMon.Common.Service
             public string name { get; set; }
             public int category_id { get; set; }
             public bool published { get; set; }
+            public List<int> types { get; set; }
         }
 
         /// <summary>
@@ -85,15 +88,15 @@ namespace EVEMon.Common.Service
         }
 
         /// <summary>
-        /// Represents a market group from ESI.
+        /// Represents a market group from ESI (/v1/markets/groups/{id}/).
+        /// Note: ESI returns "types" (list of type IDs), no parent_group_id field.
         /// </summary>
         private class EsiMarketGroup
         {
             public int market_group_id { get; set; }
             public string name { get; set; }
-            public int? parent_group_id { get; set; }
-            public int? icon_id { get; set; }
-            public bool visible { get; set; }
+            public string description { get; set; }
+            public List<int> types { get; set; }
         }
 
         /// <summary>
@@ -131,58 +134,92 @@ namespace EVEMon.Common.Service
                 groupDict[group.group_id] = group;
             }
 
-            // Build market group hierarchy
+            // Build market group dictionary
             var marketGroupDict = new Dictionary<int, EsiMarketGroup>();
-            var rootGroups = new List<SerializableMarketGroup>();
-
             foreach (var mg in marketGroups)
             {
                 marketGroupDict[mg.market_group_id] = mg;
             }
 
-            // Create market group tree
+            // ESI market group detail does not include parent_group_id, so build a flat list.
+            // Each market group will contain its associated types directly.
+            var serializableGroupDict = new Dictionary<int, SerializableMarketGroup>();
             foreach (var mg in marketGroups)
             {
-                var serializableMg = new SerializableMarketGroup
+                serializableGroupDict[mg.market_group_id] = new SerializableMarketGroup
                 {
                     ID = mg.market_group_id,
                     Name = mg.name ?? $"Market Group {mg.market_group_id}"
                 };
-
-                if (mg.parent_group_id.HasValue && marketGroupDict.ContainsKey(mg.parent_group_id.Value))
-                {
-                    // Will be added as child later
-                }
-                else
-                {
-                    rootGroups.Add(serializableMg);
-                }
             }
 
-            // Build parent-child relationships
-            BuildMarketGroupHierarchy(marketGroups, marketGroupDict, rootGroups);
-
-            // Assign items to market groups
-            var typeByMarketGroup = new Dictionary<int, List<EsiType>>();
+            // Assign items to market groups using type.market_group_id
             foreach (var type in types)
             {
-                if (type.published && type.market_group_id.HasValue)
+                if (!type.published || !type.market_group_id.HasValue)
+                    continue;
+
+                if (!serializableGroupDict.TryGetValue(type.market_group_id.Value, out var serializableMg))
+                    continue;
+
+                var item = new SerializableItem
                 {
-                    if (!typeByMarketGroup.ContainsKey(type.market_group_id.Value))
+                    ID = type.type_id,
+                    Name = type.name ?? $"Item {type.type_id}",
+                    Description = type.description ?? "",
+                    Category = "Item",
+                    PortionSize = (int)(type.portion_size ?? 1)
+                };
+
+                if (type.icon_id.HasValue)
+                    item.Icon = type.icon_id.Value.ToString();
+
+                if (type.group_id.HasValue && groupDict.TryGetValue(type.group_id.Value, out var esiGroup))
+                    item.Group = esiGroup.name ?? $"Group {type.group_id}";
+
+                serializableMg.Items.Add(item);
+            }
+
+            // Also assign items from market_group.types (if ESI embeds type IDs in group detail)
+            foreach (var mg in marketGroups)
+            {
+                if (mg.types == null || mg.types.Count == 0)
+                    continue;
+                if (!serializableGroupDict.TryGetValue(mg.market_group_id, out var serializableMg))
+                    continue;
+
+                var existingIds = new HashSet<int>(serializableMg.Items.Select(i => i.ID));
+                foreach (int typeId in mg.types)
+                {
+                    if (existingIds.Contains(typeId))
+                        continue;
+                    // Find the type
+                    var type = types.FirstOrDefault(t => t.type_id == typeId);
+                    if (type == null || !type.published)
+                        continue;
+
+                    var item = new SerializableItem
                     {
-                        typeByMarketGroup[type.market_group_id.Value] = new List<EsiType>();
-                    }
-                    typeByMarketGroup[type.market_group_id.Value].Add(type);
+                        ID = type.type_id,
+                        Name = type.name ?? $"Item {type.type_id}",
+                        Description = type.description ?? "",
+                        Category = "Item",
+                        PortionSize = (int)(type.portion_size ?? 1)
+                    };
+                    if (type.icon_id.HasValue)
+                        item.Icon = type.icon_id.Value.ToString();
+                    if (type.group_id.HasValue && groupDict.TryGetValue(type.group_id.Value, out var esiGroup))
+                        item.Group = esiGroup.name ?? $"Group {type.group_id}";
+
+                    serializableMg.Items.Add(item);
+                    existingIds.Add(typeId);
                 }
             }
 
-            // Populate items into market groups
-            PopulateMarketGroupItems(rootGroups, marketGroupDict, typeByMarketGroup, groupDict);
-
-            // Add root groups to datafile
-            foreach (var rootGroup in rootGroups)
+            // Add all groups as flat root groups (no parent-child hierarchy since ESI doesn't provide it)
+            foreach (var sg in serializableGroupDict.Values)
             {
-                datafile.MarketGroups.Add(rootGroup);
+                datafile.MarketGroups.Add(sg);
             }
 
             return datafile;
@@ -446,140 +483,8 @@ namespace EVEMon.Common.Service
             }
         }
 
-        /// <summary>
-        /// Builds the market group hierarchy.
-        /// </summary>
-        private static void BuildMarketGroupHierarchy(
-            List<EsiMarketGroup> allGroups,
-            Dictionary<int, EsiMarketGroup> groupDict,
-            List<SerializableMarketGroup> rootGroups)
-        {
-            // Build parent-child relationships
-            var childGroups = new Dictionary<int, List<SerializableMarketGroup>>();
-
-            foreach (var rootGroup in rootGroups)
-            {
-                childGroups[rootGroup.ID] = new List<SerializableMarketGroup>();
-            }
-
-            // Create serializable market groups and build hierarchy
-            var serializableGroups = new Dictionary<int, SerializableMarketGroup>();
-
-            foreach (var mg in allGroups)
-            {
-                serializableGroups[mg.market_group_id] = new SerializableMarketGroup
-                {
-                    ID = mg.market_group_id,
-                    Name = mg.name ?? $"Market Group {mg.market_group_id}"
-                };
-            }
-
-            // Add children to parents
-            foreach (var mg in allGroups)
-            {
-                if (mg.parent_group_id.HasValue && serializableGroups.ContainsKey(mg.parent_group_id.Value))
-                {
-                    serializableGroups[mg.parent_group_id.Value].SubGroups.Add(serializableGroups[mg.market_group_id]);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Populates market groups with their items.
-        /// </summary>
-        private static void PopulateMarketGroupItems(
-            List<SerializableMarketGroup> groups,
-            Dictionary<int, EsiMarketGroup> groupDict,
-            Dictionary<int, List<EsiType>> typesByMarketGroup,
-            Dictionary<int, EsiGroup> groupDictForItems)
-        {
-            foreach (var group in groups)
-            {
-                // Add items for this market group
-                if (typesByMarketGroup.TryGetValue(group.ID, out var types))
-                {
-                    foreach (var type in types)
-                    {
-                        var item = new SerializableItem
-                        {
-                            ID = type.type_id,
-                            Name = type.name ?? $"Item {type.type_id}",
-                            Description = type.description ?? "",
-                            Category = "Item",
-                            PortionSize = (int)(type.portion_size ?? 1)
-                        };
-
-                        // Set icon if available
-                        if (type.icon_id.HasValue)
-                        {
-                            item.Icon = type.icon_id.Value.ToString();
-                        }
-
-                        // Determine family from group
-                        if (type.group_id.HasValue && groupDictForItems.TryGetValue(type.group_id.Value, out var esiGroup))
-                        {
-                            item.Group = esiGroup.name ?? $"Group {type.group_id}";
-                        }
-
-                        group.Items.Add(item);
-                    }
-                }
-
-                // Recursively populate sub-groups
-                if (group.SubGroups != null && group.SubGroups.Count > 0)
-                {
-                    PopulateMarketGroupItemsRecursive(group.SubGroups, groupDict, typesByMarketGroup, groupDictForItems);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Recursively populates items into sub-groups.
-        /// </summary>
-        private static void PopulateMarketGroupItemsRecursive(
-            Collection<SerializableMarketGroup> groups,
-            Dictionary<int, EsiMarketGroup> groupDict,
-            Dictionary<int, List<EsiType>> typesByMarketGroup,
-            Dictionary<int, EsiGroup> groupDictForItems)
-        {
-            foreach (var group in groups)
-            {
-                // Add items for this market group
-                if (typesByMarketGroup.TryGetValue(group.ID, out var types))
-                {
-                    foreach (var type in types)
-                    {
-                        var item = new SerializableItem
-                        {
-                            ID = type.type_id,
-                            Name = type.name ?? $"Item {type.type_id}",
-                            Description = type.description ?? "",
-                            Category = "Item",
-                            PortionSize = (int)(type.portion_size ?? 1)
-                        };
-
-                        if (type.icon_id.HasValue)
-                        {
-                            item.Icon = type.icon_id.Value.ToString();
-                        }
-
-                        if (type.group_id.HasValue && groupDictForItems.TryGetValue(type.group_id.Value, out var esiGroup))
-                        {
-                            item.Group = esiGroup.name ?? $"Group {type.group_id}";
-                        }
-
-                        group.Items.Add(item);
-                    }
-                }
-
-                // Recurse into sub-groups
-                if (group.SubGroups != null && group.SubGroups.Count > 0)
-                {
-                    PopulateMarketGroupItemsRecursive(group.SubGroups, groupDict, typesByMarketGroup, groupDictForItems);
-                }
-            }
-        }
 
         #endregion
     }
 }
+

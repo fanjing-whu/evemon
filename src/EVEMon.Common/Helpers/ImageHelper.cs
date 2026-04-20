@@ -1,6 +1,7 @@
 ﻿using System;
 using EVEMon.Common.Constants;
 using EVEMon.Common.Enumerations;
+using EVEMon.Common.Models;
 using EVEMon.Common.Service;
 
 namespace EVEMon.Common.Helpers
@@ -17,8 +18,7 @@ namespace EVEMon.Common.Helpers
         /// <returns></returns>
         public static Uri GetAllianceImageURL(long id, int size = (int)EveImageSize.x32)
         {
-            return ImageService.GetImageServerBaseUri(string.Format(CultureConstants.
-                InvariantCulture, NetworkConstants.CCPAllianceLogo, id, size));
+            return ImageService.GetImageServerBaseUri(EveServerConfig.GetAllianceLogoPath(id, size));
         }
 
         /// <summary>
@@ -29,8 +29,7 @@ namespace EVEMon.Common.Helpers
         /// <returns></returns>
         public static Uri GetCorporationImageURL(long id, int size = (int)EveImageSize.x32)
         {
-            return ImageService.GetImageServerBaseUri(string.Format(CultureConstants.
-                InvariantCulture, NetworkConstants.CCPCorporationLogo, id, size));
+            return ImageService.GetImageServerBaseUri(EveServerConfig.GetCorporationLogoPath(id, size));
         }
 
         /// <summary>
@@ -41,8 +40,7 @@ namespace EVEMon.Common.Helpers
         /// <returns></returns>
         public static Uri GetTypeImageURL(long id, int size = (int)EveImageSize.x32)
         {
-            return ImageService.GetImageServerBaseUri(string.Format(CultureConstants.
-                InvariantCulture, NetworkConstants.CCPTypeImage, id, size));
+            return ImageService.GetImageServerBaseUri(EveServerConfig.GetTypeIconPath((int)id, size));
         }
 
         /// <summary>
@@ -53,8 +51,7 @@ namespace EVEMon.Common.Helpers
         /// <returns></returns>
         public static Uri GetTypeRenderURL(long id, int size = (int)EveImageSize.x32)
         {
-            return ImageService.GetImageServerBaseUri(string.Format(CultureConstants.
-                InvariantCulture, NetworkConstants.CCPTypeRender, id, size));
+            return ImageService.GetImageServerBaseUri(EveServerConfig.GetTypeRenderPath((int)id, size));
         }
 
         /// <summary>
@@ -65,8 +62,7 @@ namespace EVEMon.Common.Helpers
         /// <returns></returns>
         public static Uri GetPortraitUrl(long id, int size = (int)EveImageSize.x32)
         {
-            return ImageService.GetImageServerBaseUri(string.Format(CultureConstants.
-                InvariantCulture, NetworkConstants.CCPPortraits, id, size));
+            return ImageService.GetImageServerBaseUri(EveServerConfig.GetPortraitPath(id, size));
         }
     }
 }
