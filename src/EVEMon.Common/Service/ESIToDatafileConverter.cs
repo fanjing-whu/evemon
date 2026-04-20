@@ -43,27 +43,6 @@ namespace EVEMon.Common.Service
         }
 
         /// <summary>
-        /// Represents a type from ESI.
-        /// </summary>
-        private class EsiType
-        {
-            public int type_id { get; set; }
-            public string name { get; set; }
-            public string description { get; set; }
-            public bool published { get; set; }
-            public int? group_id { get; set; }
-            public int? icon_id { get; set; }
-            public int? market_group_id { get; set; }
-            public double? portion_size { get; set; }
-            public int? mass { get; set; }
-            public double? volume { get; set; }
-            public int? capacity { get; set; }
-            public int? base_price { get; set; }
-            public List<int> dogma_attributes { get; set; }
-            public List<int> dogma_effects { get; set; }
-        }
-
-        /// <summary>
         /// Represents a dogma attribute from ESI.
         /// </summary>
         private class EsiDogmaAttribute
@@ -101,10 +80,12 @@ namespace EVEMon.Common.Service
 
         /// <summary>
         /// Converts universe types (items) JSON to a serializable items datafile.
+        /// Type details are fetched on-demand from groups' and market_groups' types[] fields
+        /// (not pre-downloaded from all 54k+ universe_types).
         /// </summary>
         /// <param name="categoriesJson">JSON from /universe/categories/ endpoint.</param>
         /// <param name="groupsJson">JSON from /universe/groups/ endpoint.</param>
-        /// <param name="typesJson">JSON from /universe/types/ endpoint.</param>
+        /// <param name="typesJson">Not used — type details are fetched on-demand.</param>
         /// <param name="marketGroupsJson">JSON from /market/groups/ endpoint.</param>
         /// <returns>A serializable ItemsDatafile object.</returns>
         public static ItemsDatafile ConvertItems(
@@ -115,34 +96,43 @@ namespace EVEMon.Common.Service
         {
             var datafile = new ItemsDatafile();
 
-            // Parse JSON data
+            // Parse JSON data (typesJson is ignored; types are fetched on-demand)
             var categories = ParseJson<List<EsiCategory>>(categoriesJson);
             var groups = ParseJson<List<EsiGroup>>(groupsJson);
-            var types = ParseJson<List<EsiType>>(typesJson);
             var marketGroups = ParseJson<List<EsiMarketGroup>>(marketGroupsJson);
 
-            if (categories == null || groups == null || types == null || marketGroups == null)
+            if (categories == null || groups == null || marketGroups == null)
             {
                 EveMonClient.Trace("ESIToDatafileConverter: Failed to parse ESI data for items conversion");
                 return datafile;
             }
 
-            // Build lookup dictionaries
+            // Build group lookup dictionary
             var groupDict = new Dictionary<int, EsiGroup>();
             foreach (var group in groups)
             {
                 groupDict[group.group_id] = group;
             }
 
-            // Build market group dictionary
-            var marketGroupDict = new Dictionary<int, EsiMarketGroup>();
+            // Collect all type IDs referenced by market groups and groups
+            var allItemTypeIds = new HashSet<int>();
             foreach (var mg in marketGroups)
             {
-                marketGroupDict[mg.market_group_id] = mg;
+                if (mg.types != null)
+                    foreach (int id in mg.types)
+                        allItemTypeIds.Add(id);
+            }
+            foreach (var group in groups)
+            {
+                if (group.types != null)
+                    foreach (int id in group.types)
+                        allItemTypeIds.Add(id);
             }
 
-            // ESI market group detail does not include parent_group_id, so build a flat list.
-            // Each market group will contain its associated types directly.
+            EveMonClient.Trace($"ESIToDatafileConverter: Fetching {allItemTypeIds.Count} item type details on-demand...");
+            var itemTypes = ESISdeDownloader.FetchTypeDetailsAsync(allItemTypeIds).GetAwaiter().GetResult();
+
+            // Build market group dictionary
             var serializableGroupDict = new Dictionary<int, SerializableMarketGroup>();
             foreach (var mg in marketGroups)
             {
@@ -153,15 +143,9 @@ namespace EVEMon.Common.Service
                 };
             }
 
-            // Assign items to market groups using type.market_group_id
-            foreach (var type in types)
+            // Helper to create a SerializableItem from an EsiType
+            SerializableItem CreateItem(ESISdeDownloader.EsiType type, Dictionary<int, EsiGroup> gd)
             {
-                if (!type.published || !type.market_group_id.HasValue)
-                    continue;
-
-                if (!serializableGroupDict.TryGetValue(type.market_group_id.Value, out var serializableMg))
-                    continue;
-
                 var item = new SerializableItem
                 {
                     ID = type.type_id,
@@ -170,17 +154,14 @@ namespace EVEMon.Common.Service
                     Category = "Item",
                     PortionSize = (int)(type.portion_size ?? 1)
                 };
-
                 if (type.icon_id.HasValue)
                     item.Icon = type.icon_id.Value.ToString();
-
-                if (type.group_id.HasValue && groupDict.TryGetValue(type.group_id.Value, out var esiGroup))
+                if (type.group_id.HasValue && gd.TryGetValue(type.group_id.Value, out var esiGroup))
                     item.Group = esiGroup.name ?? $"Group {type.group_id}";
-
-                serializableMg.Items.Add(item);
+                return item;
             }
 
-            // Also assign items from market_group.types (if ESI embeds type IDs in group detail)
+            // Assign items to market groups using market_group.types[]
             foreach (var mg in marketGroups)
             {
                 if (mg.types == null || mg.types.Count == 0)
@@ -188,35 +169,44 @@ namespace EVEMon.Common.Service
                 if (!serializableGroupDict.TryGetValue(mg.market_group_id, out var serializableMg))
                     continue;
 
-                var existingIds = new HashSet<int>(serializableMg.Items.Select(i => i.ID));
                 foreach (int typeId in mg.types)
                 {
-                    if (existingIds.Contains(typeId))
-                        continue;
-                    // Find the type
-                    var type = types.FirstOrDefault(t => t.type_id == typeId);
-                    if (type == null || !type.published)
-                        continue;
-
-                    var item = new SerializableItem
+                    if (itemTypes.TryGetValue(typeId, out var type) && type.published)
                     {
-                        ID = type.type_id,
-                        Name = type.name ?? $"Item {type.type_id}",
-                        Description = type.description ?? "",
-                        Category = "Item",
-                        PortionSize = (int)(type.portion_size ?? 1)
-                    };
-                    if (type.icon_id.HasValue)
-                        item.Icon = type.icon_id.Value.ToString();
-                    if (type.group_id.HasValue && groupDict.TryGetValue(type.group_id.Value, out var esiGroup))
-                        item.Group = esiGroup.name ?? $"Group {type.group_id}";
-
-                    serializableMg.Items.Add(item);
-                    existingIds.Add(typeId);
+                        serializableMg.Items.Add(CreateItem(type, groupDict));
+                    }
                 }
             }
 
-            // Add all groups as flat root groups (no parent-child hierarchy since ESI doesn't provide it)
+            // Also assign items referenced by group.types[] that weren't already added
+            var addedIds = new HashSet<int>();
+            foreach (var mg in serializableGroupDict.Values)
+            {
+                foreach (var item in mg.Items)
+                    addedIds.Add(item.ID);
+            }
+            foreach (var group in groups)
+            {
+                if (group.types == null)
+                    continue;
+                foreach (int typeId in group.types)
+                {
+                    if (addedIds.Contains(typeId))
+                        continue;
+                    if (itemTypes.TryGetValue(typeId, out var type) && type.published)
+                    {
+                        // Add to the market group this type belongs to, if any
+                        if (type.market_group_id.HasValue &&
+                            serializableGroupDict.TryGetValue(type.market_group_id.Value, out var targetMg))
+                        {
+                            targetMg.Items.Add(CreateItem(type, groupDict));
+                            addedIds.Add(typeId);
+                        }
+                    }
+                }
+            }
+
+            // Add all groups as flat root groups
             foreach (var sg in serializableGroupDict.Values)
             {
                 datafile.MarketGroups.Add(sg);
@@ -230,7 +220,7 @@ namespace EVEMon.Common.Service
         /// Skills in EVE are items with category_id = 16 (or skill group).
         /// </summary>
         /// <param name="groupsJson">JSON from /universe/groups/ endpoint.</param>
-        /// <param name="typesJson">JSON from /universe/types/ endpoint.</param>
+        /// <param name="typesJson">Not used — type details are fetched on-demand via ESISdeDownloader.</param>
         /// <param name="dogmaAttributesJson">JSON from /dogma/attributes/ endpoint.</param>
         /// <returns>A serializable SkillsDatafile object.</returns>
         public static SkillsDatafile ConvertSkills(
@@ -240,46 +230,52 @@ namespace EVEMon.Common.Service
         {
             var datafile = new SkillsDatafile();
 
-            // Parse JSON data
+            // Parse groups from cache
             var groups = ParseJson<List<EsiGroup>>(groupsJson);
-            var types = ParseJson<List<EsiType>>(typesJson);
-
-            if (groups == null || types == null)
+            if (groups == null)
             {
-                EveMonClient.Trace("ESIToDatafileConverter: Failed to parse ESI data for skills conversion");
+                EveMonClient.Trace("ESIToDatafileConverter: Failed to parse groups data for skills conversion");
                 return datafile;
             }
 
             // Skill category ID is 16 in EVE ESI
             const int SkillCategoryId = 16;
 
-            // Filter skill groups
+            // Filter skill groups and collect all type IDs they reference
             var skillGroups = new List<EsiGroup>();
+            var allSkillTypeIds = new HashSet<int>();
             foreach (var group in groups)
             {
                 if (group.category_id == SkillCategoryId && group.published)
                 {
                     skillGroups.Add(group);
+                    if (group.types != null)
+                    {
+                        foreach (int typeId in group.types)
+                            allSkillTypeIds.Add(typeId);
+                    }
                 }
             }
 
-            // Build skill group dictionary
-            var skillGroupDict = new Dictionary<int, EsiGroup>();
-            foreach (var group in skillGroups)
+            if (allSkillTypeIds.Count == 0)
             {
-                skillGroupDict[group.group_id] = group;
+                EveMonClient.Trace("ESIToDatafileConverter: No skill type IDs found in groups");
+                return datafile;
             }
 
-            // Filter skills (published types in skill groups)
-            var skillsByGroup = new Dictionary<int, List<EsiType>>();
-            foreach (var type in types)
+            // Fetch type details on-demand (only the skill types referenced by groups, not all 54k+)
+            EveMonClient.Trace($"ESIToDatafileConverter: Fetching {allSkillTypeIds.Count} skill type details on-demand...");
+            var skillTypes = ESISdeDownloader.FetchTypeDetailsAsync(allSkillTypeIds).GetAwaiter().GetResult();
+
+            // Build lookup dictionary keyed by group_id
+            var skillsByGroup = new Dictionary<int, List<ESISdeDownloader.EsiType>>();
+            foreach (var kvp in skillTypes)
             {
-                if (type.published && type.group_id.HasValue && skillGroupDict.ContainsKey(type.group_id.Value))
+                var type = kvp.Value;
+                if (type.published && type.group_id.HasValue)
                 {
                     if (!skillsByGroup.ContainsKey(type.group_id.Value))
-                    {
-                        skillsByGroup[type.group_id.Value] = new List<EsiType>();
-                    }
+                        skillsByGroup[type.group_id.Value] = new List<ESISdeDownloader.EsiType>();
                     skillsByGroup[type.group_id.Value].Add(type);
                 }
             }

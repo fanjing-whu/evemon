@@ -90,7 +90,10 @@ namespace EVEMon.Common.Service
             // P0 - Critical endpoints (two-phase: list IDs then fetch each detail)
             new SdeEndpoint { Name = "universe_categories", Path = "/v1/universe/categories/", IsPaged = false, Priority = 0, Description = "Item categories", DetailPath = "/v1/universe/categories/{0}/" },
             new SdeEndpoint { Name = "universe_groups",     Path = "/v1/universe/groups/",     IsPaged = true,  Priority = 0, Description = "Item/skill groups",  DetailPath = "/v1/universe/groups/{0}/" },
-            new SdeEndpoint { Name = "universe_types",      Path = "/v1/universe/types/",      IsPaged = true,  Priority = 0, Description = "All item/skill types", DetailPath = "/v1/universe/types/{0}/" },
+            // NOTE: universe_types (54k+ items) is NOT fetched in two-phase here.
+            // ConvertSkills/ConvertItems will fetch only the types they actually need,
+            // by calling FetchTypeDetailsAsync() with the specific type IDs referenced by groups.
+            new SdeEndpoint { Name = "universe_types",      Path = "/v1/universe/types/",      IsPaged = true,  Priority = 0, Description = "All item/skill type IDs (details fetched on-demand)" },
 
             // P1 - Important endpoints
             new SdeEndpoint { Name = "market_groups",       Path = "/v1/markets/groups/",           IsPaged = false, Priority = 1, Description = "Market groups",         DetailPath = "/v1/markets/groups/{0}/" },
@@ -327,6 +330,128 @@ namespace EVEMon.Common.Service
             }
             return finalList;
         }
+
+        /// <summary>
+        /// Fetches type details from ESI for a batch of type IDs.
+        /// Use this for on-demand loading of the specific types needed by converters
+        /// (e.g., skill types referenced by groups), rather than downloading all 54k+ types upfront.
+        /// Results are cached in memory for the lifetime of the process.
+        /// </summary>
+        /// <param name="typeIds">The type IDs to fetch.</param>
+        /// <param name="progress">Optional progress reporter (current, total, status).</param>
+        /// <param name="forceRefresh">If true, bypass any in-memory cache.</param>
+        /// <returns>A dictionary mapping type_id to EsiType objects.</returns>
+        public static async Task<Dictionary<int, EsiType>> FetchTypeDetailsAsync(
+            IEnumerable<int> typeIds,
+            IProgress<(int current, int total, string status)> progress = null,
+            bool forceRefresh = false)
+        {
+            var uniqueIds = typeIds.Distinct().ToList();
+            if (uniqueIds.Count == 0)
+                return new Dictionary<int, EsiType>();
+
+            // Check in-memory cache first
+            if (!forceRefresh && s_typeDetailCache != null)
+            {
+                var uncached = uniqueIds.Where(id => !s_typeDetailCache.ContainsKey(id)).ToList();
+                if (uncached.Count == 0)
+                {
+                    progress?.Report((uniqueIds.Count, uniqueIds.Count, $"Types loaded from cache ({uniqueIds.Count} items)"));
+                    return uniqueIds.ToDictionary(id => id, id => s_typeDetailCache[id]);
+                }
+                uniqueIds = uncached;
+            }
+
+            var baseUrl = EveServerConfig.ESIBase;
+            var detailPath = "/v1/universe/types/{0}/";
+            var fetched = new EsiType[uniqueIds.Count];
+            var sem = new SemaphoreSlim(DetailFetchConcurrency);
+            int completed = 0;
+            var tasks = uniqueIds.Select(async (id, index) =>
+            {
+                await sem.WaitAsync();
+                try
+                {
+                    var url = new Uri(baseUrl, string.Format(detailPath, id) + "?datasource=serenity");
+                    for (int retry = 0; retry < s_maxRetries; retry++)
+                    {
+                        try
+                        {
+                            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                            req.Headers.Add("Accept", "application/json");
+                            using var resp = await s_httpClient.SendAsync(req);
+                            if (!resp.IsSuccessStatusCode)
+                            {
+                                if (retry < s_maxRetries - 1)
+                                {
+                                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, retry)));
+                                    continue;
+                                }
+                                break;
+                            }
+                            string body = await resp.Content.ReadAsStringAsync();
+                            var type = JsonSerializer.Deserialize<EsiType>(body);
+                            if (type != null)
+                                fetched[index] = type;
+                            break;
+                        }
+                        catch (Exception ex) when (retry < s_maxRetries - 1)
+                        {
+                            await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, retry)));
+                        }
+                    }
+                }
+                finally
+                {
+                    var c = Interlocked.Increment(ref completed);
+                    if (c % 50 == 0 || c == uniqueIds.Count)
+                    {
+                        progress?.Report((c, uniqueIds.Count, $"Fetching type details: {c}/{uniqueIds.Count}"));
+                    }
+                    sem.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+
+            // Update in-memory cache
+            if (s_typeDetailCache == null)
+                s_typeDetailCache = new Dictionary<int, EsiType>();
+            foreach (var type in fetched)
+            {
+                if (type != null)
+                    s_typeDetailCache[type.type_id] = type;
+            }
+
+            // Return all requested IDs (null for failed ones)
+            var result = new Dictionary<int, EsiType>();
+            foreach (int id in typeIds)
+            {
+                if (s_typeDetailCache.TryGetValue(id, out var cached))
+                    result[id] = cached;
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Represents a type object from ESI /v1/universe/types/{type_id}/.
+        /// </summary>
+        public class EsiType
+        {
+            public int type_id { get; set; }
+            public string name { get; set; }
+            public string description { get; set; }
+            public bool published { get; set; }
+            public int? group_id { get; set; }
+            public int? market_group_id { get; set; }
+            public int? icon_id { get; set; }
+            public int? portion_size { get; set; }
+        }
+
+        /// <summary>
+        /// In-memory cache for type details fetched on-demand.
+        /// </summary>
+        private static Dictionary<int, EsiType> s_typeDetailCache;
 
         /// <summary>
         /// Downloads a single page from an endpoint (legacy path for non-ID-list endpoints).
