@@ -727,26 +727,41 @@ namespace EVEMon.Common.Service
         private static Dictionary<int, EsiType> s_tqLocalResourceCache;
 
         /// <summary>
-        /// Loads type details from the local TQ datafile (eve-items-en-US.xml.gzip).
+        /// Loads type details from local TQ datafiles (eve-items-en-US.xml.gzip and eve-skills-en-US.xml.gzip).
         /// This is used as a fallback when Seren ESI data is unavailable,
         /// avoiding any network requests to TQ ESI.
         /// Thread-safe, loaded only once on first use.
         /// </summary>
         /// <returns>A dictionary mapping type_id to EsiType objects.</returns>
-        private static async Task<Dictionary<int, EsiType>> LoadTQTypeDetailsFromLocalResourceAsync()
+        internal static async Task<Dictionary<int, EsiType>> LoadTQTypeDetailsFromLocalResourceAsync()
         {
             if (s_tqLocalResourceCache != null)
                 return s_tqLocalResourceCache;
 
             var localCache = new Dictionary<int, EsiType>();
+            
+            // Load from eve-items-en-US.xml.gzip (market items)
+            LoadItemsFromDatafile(localCache, "eve-items-en-US.xml.gzip");
+            
+            // Also load from eve-skills-en-US.xml.gzip (skills)
+            LoadSkillsFromDatafile(localCache, "eve-skills-en-US.xml.gzip");
+
+            EveMonClient.Trace($"Loaded {localCache.Count} type details from local TQ resources");
+            s_tqLocalResourceCache = localCache;
+            return localCache;
+        }
+
+        /// <summary>
+        /// Loads type details from an items datafile into the target cache.
+        /// </summary>
+        private static void LoadItemsFromDatafile(Dictionary<int, EsiType> localCache, string filename)
+        {
             string[] possiblePaths = new[]
             {
-                // Installed resources directory (normal install)
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "eve-items-en-US.xml.gzip"),
-                // %APPDATA% (copied by Datafile.GetFullPath)
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", filename),
                 Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "EVEMon", "eve-items-en-US.xml.gzip"),
+                    "EVEMon", filename),
             };
 
             foreach (string path in possiblePaths)
@@ -764,25 +779,92 @@ namespace EVEMon.Common.Service
 
                     if (serializer.Deserialize(gzipStream) is Serialization.Datafiles.ItemsDatafile datafile)
                     {
+                        EveMonClient.Trace($"ItemsDatafile deserialized: MarketGroups count = {datafile.MarketGroups?.Count ?? -1}");
                         foreach (var mg in datafile.MarketGroups)
                         {
                             CollectItemsFromMarketGroupRecursive(mg, localCache);
                         }
                     }
-
-                    EveMonClient.Trace($"Loaded {localCache.Count} type details from local TQ resource");
-                    s_tqLocalResourceCache = localCache;
-                    return localCache;
+                    return;
                 }
                 catch (Exception ex)
                 {
                     EveMonClient.Trace($"Failed to load TQ resource from {path}: {ex.Message}");
                 }
             }
+        }
 
-            EveMonClient.Trace("No local TQ resource found, TQ fallback will require network");
-            s_tqLocalResourceCache = localCache;
-            return localCache;
+        /// <summary>
+        /// Loads skill details from a skills datafile into the target cache.
+        /// Uses XmlReader with namespace handling to work around the xmlns declarations in the XML.
+        /// </summary>
+        private static void LoadSkillsFromDatafile(Dictionary<int, EsiType> localCache, string filename)
+        {
+            string[] possiblePaths = new[]
+            {
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", filename),
+                Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "EVEMon", filename),
+            };
+
+            foreach (string path in possiblePaths)
+            {
+                try
+                {
+                    if (!File.Exists(path))
+                        continue;
+
+                    EveMonClient.Trace($"Loading TQ skill details from local resource: {path}");
+
+                    using var stream = File.OpenRead(path);
+                    using var gzipStream = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
+                    var serializer = new XmlSerializer(typeof(Serialization.Datafiles.SkillsDatafile));
+
+                    // Use XmlReaderSettings to ignore namespaces that may cause deserialization issues
+                    var settings = new System.Xml.XmlReaderSettings
+                    {
+                        IgnoreWhitespace = true,
+                        IgnoreComments = true,
+                        IgnoreProcessingInstructions = true
+                    };
+
+                    using var reader = System.Xml.XmlReader.Create(gzipStream, settings);
+                    if (serializer.Deserialize(reader) is Serialization.Datafiles.SkillsDatafile datafile)
+                    {
+                        EveMonClient.Trace($"SkillsDatafile deserialized: SkillGroups count = {datafile.SkillGroups?.Count ?? -1}");
+                        int skillCount = 0;
+                        foreach (var group in datafile.SkillGroups)
+                        {
+                            EveMonClient.Trace($"  Group: {group.ID} '{group.Name}', Skills count = {group.Skills?.Count ?? -1}");
+                            foreach (var skill in group.Skills)
+                            {
+                                if (!localCache.ContainsKey(skill.ID))
+                                {
+                                    localCache[skill.ID] = new EsiType
+                                    {
+                                        type_id = skill.ID,
+                                        name = skill.Name ?? $"Skill {skill.ID}",
+                                        description = skill.Description ?? "",
+                                        published = skill.Public,
+                                        group_id = group.ID,
+                                        market_group_id = null,
+                                        icon_id = null,
+                                        portion_size = 1
+                                    };
+                                    skillCount++;
+                                }
+                            }
+                        }
+                        EveMonClient.Trace($"Loaded {skillCount} skills from local TQ resource");
+                    }
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    EveMonClient.Trace($"Failed to load TQ skill resource from {path}: {ex}");
+                }
+            }
         }
 
         /// <summary>

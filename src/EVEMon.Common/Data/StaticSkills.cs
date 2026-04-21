@@ -28,9 +28,11 @@ namespace EVEMon.Common.Data
         /// </summary>
         internal static void Load()
         {
+            EveMonClient.Trace("StaticSkills.Load - Loading skills datafile...");
             SkillsDatafile datafile = Util.DeserializeDatafile<SkillsDatafile>(DatafileConstants.SkillsDatafile,
                 Util.LoadXslt(Properties.Resources.DatafilesXSLT));
 
+            EveMonClient.Trace($"StaticSkills.Load - datafile is {(datafile == null ? "NULL" : "OK")}, SkillGroups count = {datafile?.SkillGroups?.Count ?? -1}");
             LoadFromDatafile(datafile);
         }
 
@@ -41,9 +43,17 @@ namespace EVEMon.Common.Data
         /// <param name="datafile">The pre-loaded skills datafile.</param>
         internal static void LoadFromDatafile(SkillsDatafile datafile)
         {
+            if (datafile == null)
+            {
+                EveMonClient.Trace("StaticSkills.LoadFromDatafile - datafile is NULL, skipping");
+                return;
+            }
+
             // Fetch deserialized data
             s_arrayIndicesCount = 0;
             List<Collection<SerializableSkillPrerequisite>> prereqs = new List<Collection<SerializableSkillPrerequisite>>();
+
+            EveMonClient.Trace($"StaticSkills.LoadFromDatafile - Processing {datafile.SkillGroups.Count} skill groups");
             foreach (SerializableSkillGroup srcGroup in datafile.SkillGroups)
             {
                 StaticSkillGroup group = new StaticSkillGroup(srcGroup, ref s_arrayIndicesCount);
@@ -59,6 +69,8 @@ namespace EVEMon.Common.Data
                 // Store prereqs
                 prereqs.AddRange(srcGroup.Skills.Select(serialSkill => serialSkill.SkillPrerequisites));
             }
+
+            EveMonClient.Trace($"StaticSkills.LoadFromDatafile - Loaded {s_skillsByID.Count} skills, {s_skillGroupsByID.Count} groups");
 
             // Complete initialization
             s_skills = new StaticSkill[s_arrayIndicesCount];

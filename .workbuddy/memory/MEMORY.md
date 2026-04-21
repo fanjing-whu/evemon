@@ -21,3 +21,10 @@
 - `SerenDataLoader.ReadCacheWithFallbackAsync` 辅助方法对所有 endpoint 数据使用 fallback 读取
 - 所有 endpoint 列表数据（categories/groups/types/market_groups 等）通过 `ESISdeCacheManager.ReadCacheWithFallbackAsync` 读取，Seren 无缓存时自动使用 TQ 缓存
 - `universe_systems` 详情不通过 ESI 获取（8537个星系太慢），改为从本地 TQ 资源按需加载
+
+- **Pyfa FSD 数据作为备用技能数据源（2026-04-20）**：
+  - Pyfa 项目公开了其 FSD 数据，位于 `D:\Works\codes\fanjing\evemon_cn\Pyfa\staticdata\fsd_built`
+  - 转换脚本位于 `scripts/pyfa_to_evemon/generate_eve_skills_from_pyfa.py`
+  - 输出：`src\EVEMon\bin\Release\net8.0-windows\Resources\eve-skills-en-US.xml.gzip`
+  - 转换结果：591 个技能，25 个技能组，包含所有前置技能关系
+

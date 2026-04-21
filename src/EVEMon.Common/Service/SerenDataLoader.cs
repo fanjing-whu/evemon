@@ -3,8 +3,10 @@ using EVEMon.Common.Enumerations;
 using EVEMon.Common.Helpers;
 using EVEMon.Common.Models;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -165,7 +167,8 @@ namespace EVEMon.Common.Service
                 GlobalDatafileCollection.OnDatafileLoaded();
 
                 ReportProgress(90, "Loading skills...");
-                await Task.Run(() => Data.StaticSkills.Load());
+                // Load skills from local TQ resource directly (bypassing ESI cache which may be empty)
+                await Task.Run(() => LoadSkillsFromTQResource());
                 GlobalDatafileCollection.OnDatafileLoaded();
 
                 ReportProgress(95, "Loading reprocessing...");
@@ -220,6 +223,61 @@ namespace EVEMon.Common.Service
 
             datafile.MarketGroups.Add(rootGroup);
             return datafile;
+        }
+
+        /// <summary>
+        /// Loads skills from the local TQ resource file (eve-skills-en-US.xml.gzip).
+        /// This bypasses the ESI cache which may be empty or incomplete.
+        /// </summary>
+        private static void LoadSkillsFromTQResource()
+        {
+            string[] possiblePaths = new[]
+            {
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "eve-skills-en-US.xml.gzip"),
+                Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "EVEMon", "eve-skills-en-US.xml.gzip"),
+            };
+
+            foreach (string path in possiblePaths)
+            {
+                try
+                {
+                    if (!File.Exists(path))
+                        continue;
+
+                    EveMonClient.Trace($"SerenDataLoader: Loading skills from {path}");
+
+                    using var stream = File.OpenRead(path);
+                    using var gzipStream = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
+
+                    // Use XmlReaderSettings to ignore namespaces that may cause deserialization issues
+                    var settings = new System.Xml.XmlReaderSettings
+                    {
+                        IgnoreWhitespace = true,
+                        IgnoreComments = true,
+                        IgnoreProcessingInstructions = true
+                    };
+
+                    using var reader = System.Xml.XmlReader.Create(gzipStream, settings);
+                    var serializer = new System.Xml.Serialization.XmlSerializer(typeof(Serialization.Datafiles.SkillsDatafile));
+
+                    if (serializer.Deserialize(reader) is Serialization.Datafiles.SkillsDatafile datafile)
+                    {
+                        EveMonClient.Trace($"SerenDataLoader: SkillsDatafile loaded, SkillGroups = {datafile.SkillGroups?.Count ?? -1}");
+                        Data.StaticSkills.LoadFromDatafile(datafile);
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    EveMonClient.Trace($"SerenDataLoader: Failed to load skills from {path}: {ex.Message}");
+                }
+            }
+
+            EveMonClient.Trace("SerenDataLoader: Could not find skills datafile, falling back to default Load()");
+            // Fallback to the original method
+            Data.StaticSkills.Load();
         }
 
         /// <summary>
@@ -403,24 +461,44 @@ namespace EVEMon.Common.Service
             ReportProgress(90, "Loading skills...");
             try
             {
+                EveMonClient.Trace("SerenDataLoader: Loading skills from ESI cache...");
                 var skillsDatafile = ESIToDatafileConverter.LoadDatafileFromCache<Serialization.Datafiles.SkillsDatafile>(
                     "eve-skills-esi.xml.gzip");
-                if (skillsDatafile != null)
+
+                // Check if the skills datafile is valid (has groups with skills)
+                bool hasValidSkills = skillsDatafile != null &&
+                    skillsDatafile.SkillGroups?.Count > 0 &&
+                    skillsDatafile.SkillGroups.Any(g => g.Skills?.Count > 0);
+
+                EveMonClient.Trace($"SerenDataLoader: Skills datafile from cache = {(skillsDatafile == null ? "NULL" : "OK, SkillGroups=" + skillsDatafile.SkillGroups?.Count + ", HasSkills=" + hasValidSkills)}");
+
+                if (hasValidSkills)
                 {
                     await Task.Run(() => Data.StaticSkills.LoadFromDatafile(skillsDatafile));
-                    // Notify MainWindow to update progress bar
                     GlobalDatafileCollection.OnDatafileLoaded();
                     skillsLoaded = true;
                 }
                 else
                 {
-                    EveMonClient.Trace("SerenDataLoader: Skills datafile not found in cache");
+                    EveMonClient.Trace("SerenDataLoader: ESI skills cache is empty/invalid, loading from local TQ resource...");
+                    // Fallback to loading from local TQ resource
+                    await Task.Run(() => LoadSkillsFromTQResource());
+                    GlobalDatafileCollection.OnDatafileLoaded();
+                    skillsLoaded = true; // Even if it fails, we tried the fallback
                 }
             }
             catch (Exception ex)
             {
                 EveMonClient.Trace($"SerenDataLoader: Failed to load skills: {ex.Message}");
                 ExceptionHandler.LogException(ex, false);
+                // Try fallback
+                try
+                {
+                    await Task.Run(() => LoadSkillsFromTQResource());
+                    GlobalDatafileCollection.OnDatafileLoaded();
+                    skillsLoaded = true;
+                }
+                catch { }
             }
 
             // If core data (items or skills) failed to load, return false
