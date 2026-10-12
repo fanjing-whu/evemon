@@ -204,24 +204,6 @@ namespace EVEMon.Common.QueryMonitor
         {
             LastResult = result;
             LastUpdate = DateTime.UtcNow;
-
-            // TEMP DIAGNOSTIC (dev_seren_zh): record what drives NextUpdate — the configured
-            // period or the ESI cache expiry. Remove once the update schedule question is settled.
-            try
-            {
-                string method = Method.ToString();
-                var period = Settings.Updates.Periods.ContainsKey(method)
-                    ? Settings.Updates.Periods[method]
-                    : UpdatePeriod.Never;
-                EveMonClient.Trace(
-                    "UpdateDiag {0}: cachedUntil={1:u} (in {2:F1}h) configuredPeriod={3} hasError={4}",
-                    method, result.CachedUntil,
-                    result.CachedUntil.Subtract(DateTime.UtcNow).TotalHours, period, result.HasError);
-            }
-            catch (Exception ex)
-            {
-                EveMonClient.Trace("UpdateDiag failed: {0}", ex.Message);
-            }
         }
 
         /// <summary>
@@ -306,6 +288,31 @@ namespace EVEMon.Common.QueryMonitor
                 m_retryOnForceUpdateError = false;
                 LastUpdate = DateTime.UtcNow;
                 LastResult = result;
+
+                // TEMP DIAGNOSTIC (dev_seren_zh): record the two inputs that decide NextUpdate —
+                // the user configured period and the ESI cache expiry — so the long countdowns
+                // in the throbber menu can be explained. Remove once settled.
+                try
+                {
+                    string diagMethod = Method.ToString();
+                    var diagPeriod = Settings.Updates.Periods.ContainsKey(diagMethod)
+                        ? Settings.Updates.Periods[diagMethod]
+                        : UpdatePeriod.Never;
+                    double diagNext = NextUpdate == DateTime.MaxValue
+                        ? -1.0
+                        : NextUpdate.Subtract(DateTime.UtcNow).TotalHours;
+                    EveMonClient.Trace(
+                        "UpdateDiag {0}: esiCachedUntil={1:u} (in {2:F1}h) configuredPeriod={3} " +
+                        "nextUpdateIn={4:F1}h hasError={5}",
+                        diagMethod, result.CachedUntil,
+                        result.CachedUntil.Subtract(DateTime.UtcNow).TotalHours, diagPeriod,
+                        diagNext, result.HasError);
+                }
+                catch (Exception diagEx)
+                {
+                    EveMonClient.Trace("UpdateDiag failed: {0}", diagEx.Message);
+                }
+
                 // Notify subscribers
                 Callback?.Invoke(result);
             }
