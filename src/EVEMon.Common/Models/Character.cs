@@ -1026,8 +1026,8 @@ namespace EVEMon.Common.Models
                         bool known = item != null;
                         if (known)
                             resolved++;
-                        EveMonClient.Trace("ImplantsDiag id={0} name={1} group={2}",
-                            id, item?.Name ?? "(not in items datafile)", item?.Group?.Name ?? "-");
+                        EveMonClient.Trace("ImplantsDiag id={0} name={1}",
+                            id, item?.Name ?? "(not in items datafile)");
                     }
                 }
                 EveMonClient.Trace("ImplantsDiag[{0}]: esi returned {1} implants, {2} found in items datafile",
