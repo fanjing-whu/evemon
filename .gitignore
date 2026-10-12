@@ -221,6 +221,8 @@ tools/XmlGenerator/sqlite-latest.sqlite-journal
 
 # Python quick check files
 *.py
+# ...but keep the project's converter scripts under version control
+!scripts/**/*.py
 
 # Crash log
 crash_log.txt
