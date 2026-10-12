@@ -204,6 +204,24 @@ namespace EVEMon.Common.QueryMonitor
         {
             LastResult = result;
             LastUpdate = DateTime.UtcNow;
+
+            // TEMP DIAGNOSTIC (dev_seren_zh): record what drives NextUpdate — the configured
+            // period or the ESI cache expiry. Remove once the update schedule question is settled.
+            try
+            {
+                string method = Method.ToString();
+                var period = Settings.Updates.Periods.ContainsKey(method)
+                    ? Settings.Updates.Periods[method]
+                    : UpdatePeriod.Never;
+                EveMonClient.Trace(
+                    "UpdateDiag {0}: cachedUntil={1:u} (in {2:F1}h) configuredPeriod={3} hasError={4}",
+                    method, result.CachedUntil,
+                    result.CachedUntil.Subtract(DateTime.UtcNow).TotalHours, period, result.HasError);
+            }
+            catch (Exception ex)
+            {
+                EveMonClient.Trace("UpdateDiag failed: {0}", ex.Message);
+            }
         }
 
         /// <summary>

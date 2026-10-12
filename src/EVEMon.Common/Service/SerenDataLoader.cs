@@ -150,6 +150,14 @@ namespace EVEMon.Common.Service
                 ReportProgress(50, "Creating items datafile...");
                 var itemsDatafile = ConvertTQToItemsDatafile(tqCache);
                 
+                // Properties must be loaded before items: every item property value resolves its
+                // definition against this table at construction time (see GlobalDatafileCollection
+                // .LoadAsync where the same ordering is documented). Without it the implant slot
+                // property (331) can never be resolved, so implants collapse to zero bonus.
+                ReportProgress(45, "Loading properties...");
+                await Task.Run(() => Data.StaticProperties.Load());
+                GlobalDatafileCollection.OnDatafileLoaded();
+
                 await Task.Run(() => Data.StaticItems.LoadFromDatafile(itemsDatafile));
                 GlobalDatafileCollection.OnDatafileLoaded();
 
@@ -477,6 +485,9 @@ namespace EVEMon.Common.Service
                     "eve-items-esi.xml.gzip");
                 if (itemsDatafile != null)
                 {
+                    // Properties must be loaded before items (implant slots and every other item
+                    // property depend on this table being populated first).
+                    await Task.Run(() => Data.StaticProperties.Load());
                     await Task.Run(() => Data.StaticItems.LoadFromDatafile(itemsDatafile));
                     // Notify MainWindow to update progress bar
                     GlobalDatafileCollection.OnDatafileLoaded();
