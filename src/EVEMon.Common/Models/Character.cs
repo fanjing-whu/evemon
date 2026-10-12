@@ -914,6 +914,15 @@ namespace EVEMon.Common.Models
             SetAttribute(EveAttribute.Memory, attribs.Memory, memImplantBonus, boosterBonus);
 
             SetAttributeBoosterBonus(boosterBonus);
+
+            // TEMP DIAGNOSTIC (dev_seren_zh): raw ESI attribute values vs. what EVEMon derives
+            // from them. Remove once the attribute/booster question is settled.
+            EveMonClient.Trace(
+                "AttrDiag[{0}]: esi int={1} per={2} wil={3} cha={4} mem={5} | implants int={6} per={7} " +
+                "wil={8} cha={9} mem={10} | derivedBooster={11}",
+                Name, attribs.Intelligence, attribs.Perception, attribs.Willpower, attribs.Charisma,
+                attribs.Memory, intImplantBonus, perImplantBonus, wilImplantBonus, chaImplantBonus,
+                memImplantBonus, boosterBonus);
         }
 
         /// <summary>
@@ -1004,6 +1013,31 @@ namespace EVEMon.Common.Models
         /// <param name="implants">The serialized implant information</param>
         internal void Import(List<int> implants)
         {
+            // TEMP DIAGNOSTIC (dev_seren_zh): what the ESI implants endpoint actually returned,
+            // and whether those IDs resolve to entries in the local implant table.
+            try
+            {
+                int resolved = 0;
+                if (implants != null)
+                {
+                    foreach (int id in implants)
+                    {
+                        var item = StaticItems.GetItemByID(id);
+                        bool known = item != null;
+                        if (known)
+                            resolved++;
+                        EveMonClient.Trace("ImplantsDiag id={0} name={1} group={2}",
+                            id, item?.Name ?? "(not in items datafile)", item?.Group?.Name ?? "-");
+                    }
+                }
+                EveMonClient.Trace("ImplantsDiag[{0}]: esi returned {1} implants, {2} found in items datafile",
+                    Name, implants?.Count ?? -1, resolved);
+            }
+            catch (Exception ex)
+            {
+                EveMonClient.Trace("ImplantsDiag failed: {0}", ex.Message);
+            }
+
             // Implants
             var newImplants = new LinkedList<SerializableNewImplant>();
             foreach (int implant in implants)

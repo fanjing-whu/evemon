@@ -46,6 +46,32 @@ namespace EVEMon.Common.Models
                 }
                 EndTime = startTimeWhenPaused;
             }
+
+            // TEMP DIAGNOSTIC (dev_seren_zh): dump queue item inputs to settle the SP/Hour and
+            // booster questions. Remove once resolved.
+            try
+            {
+                if (Skill != null && Skill.StaticData != null)
+                {
+                    var st = Skill.StaticData;
+                    double expHours = Owner != null
+                        ? Owner.GetTimeSpanForPointsWithoutBoosters(st, serial.Level).TotalHours
+                        : -1;
+                    EveMonClient.Trace(
+                        "QueueDiag id={0} L{1} paused={2} queueH={3:F3} startSP={4} endSP={5} rank={6} " +
+                        "pri={7} sec={8} rateWith={9:F0} rateNoBooster={10:F0} expTimeNoBoosterH={11:F3}",
+                        serial.ID, serial.Level, serial.IsPaused,
+                        EndTime.Subtract(StartTime).TotalHours, StartSP, EndSP, st.Rank,
+                        st.PrimaryAttribute, st.SecondaryAttribute,
+                        Owner != null ? Owner.GetBaseSPPerHour(st) : -1,
+                        Owner != null ? Owner.GetBaseSPPerHourWithoutBoosters(st) : -1,
+                        expHours);
+                }
+            }
+            catch (Exception ex)
+            {
+                EveMonClient.Trace("QueueDiag failed for id={0}: {1}", serial.ID, ex.Message);
+            }
         }
 
         /// <summary>
