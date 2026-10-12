@@ -92,6 +92,33 @@ namespace EVEMon.Common.Models
             var skill = CurrentlyTrainingSkill;
             var skillIsTraining = (skill != null) && skill.IsTraining;
 
+            // Diagnostic trace: the account status detection depends on how much skill and
+            // queue data has arrived, which is timing sensitive on Seren (async loading).
+            int skillCount = 0, belowLevel = 0, overAlphaLimit = 0, alphaLimitZero = 0;
+            foreach (var diagSkill in Skills)
+            {
+                skillCount++;
+                if (diagSkill.ActiveLevel < diagSkill.Level)
+                    belowLevel++;
+                if (diagSkill.StaticData != null)
+                {
+                    if (diagSkill.StaticData.AlphaLimit == 0)
+                        alphaLimitZero++;
+                    if (diagSkill.ActiveLevel > diagSkill.StaticData.AlphaLimit)
+                        overAlphaLimit++;
+                }
+            }
+            var diagQueue = (this as CCPCharacter)?.SkillQueue;
+            // Note: SkillPoints is only evaluated when skillIsTraining is true, mirroring
+            // the short-circuit in the actual logic below (it queries Skill.IsTraining,
+            // which is unsafe before the derived class finishes constructing).
+            EveMonClient.Trace("UpdateAccountStatus[{0}]: in={1} skillIsTraining={2} SP={3} " +
+                "skills={4} belowLevel={5} overAlphaLimit={6} alphaLimitZero={7} " +
+                "queueItems={8} queueIsPaused={9} queueIsTraining={10}", Name, status,
+                skillIsTraining, skillIsTraining ? SkillPoints : 0L, skillCount, belowLevel,
+                overAlphaLimit, alphaLimitZero, diagQueue?.Count ?? -1,
+                diagQueue?.IsPaused ?? false, diagQueue?.IsTraining ?? false);
+
             if (skillIsTraining && SkillPoints > EveConstants.MaxAlphaSkillTraining)
             {
                 status = AccountStatus.Omega;

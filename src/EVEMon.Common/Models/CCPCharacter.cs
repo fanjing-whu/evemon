@@ -286,7 +286,9 @@ namespace EVEMon.Common.Models
         /// <summary>
         /// Gets true when the character is currently actively training, false otherwise.
         /// </summary>
-        public override bool IsTraining => SkillQueue.IsTraining;
+        // SkillQueue may still be null when this is reached from the base class constructor
+        // (UpdateAccountStatus is called there, and Skill.SkillPoints queries IsTraining).
+        public override bool IsTraining => SkillQueue?.IsTraining ?? false;
 
         /// <summary>
         /// Gets the skill currently in training, even when it is paused.
