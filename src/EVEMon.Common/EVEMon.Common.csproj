@@ -212,6 +212,33 @@
     <None Update="Resources\eve-skills-en-US.xml.gzip">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Resources\eve-blueprints-zh-CN.xml.gzip">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\eve-certificates-zh-CN.xml.gzip">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\eve-geography-zh-CN.xml.gzip">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\eve-items-zh-CN.xml.gzip">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\eve-masteries-zh-CN.xml.gzip">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\eve-properties-zh-CN.xml.gzip">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\eve-skills-zh-CN.xml.gzip">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\eve-skills-pyfa-zh-CN.xml.gzip">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\eve-name-alias-zh.txt.gzip">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="Resources\License\gpl.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

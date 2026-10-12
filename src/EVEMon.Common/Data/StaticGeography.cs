@@ -77,7 +77,7 @@ namespace EVEMon.Common.Data
         /// </summary>
         private static GeoDatafile LoadGeoData()
         {
-            var datafile = Util.DeserializeDatafile<GeoDatafile>(DatafileConstants.GeographyDatafile,
+            var datafile = Util.DeserializeDatafile<GeoDatafile>(DatafileConstants.GeographyDatafileLocalized,
                 Util.LoadXslt(Properties.Resources.DatafilesXSLT));
 
             // Generate the nodes
@@ -245,8 +245,17 @@ namespace EVEMon.Common.Data
         /// </summary>
         /// <param name="name">The name.</param>
         /// <returns></returns>
-        public static SolarSystem GetSolarSystemByName(string name) => s_solarSystemsByID.
-            Values.FirstOrDefault(system => system.Name == name);
+        public static SolarSystem GetSolarSystemByName(string name)
+        {
+            var system = s_solarSystemsByID.Values.FirstOrDefault(x => x.Name == name);
+            if (system != null)
+                return system;
+
+            // System names arriving from ESI, bookmarks or routes stay English
+            string chineseName = NameAlias.Resolve(name);
+            return chineseName == name ? null : s_solarSystemsByID.Values.FirstOrDefault(
+                x => x.Name == chineseName);
+        }
 
         /// <summary>
         /// Gets the station with the provided ID.
@@ -289,8 +298,18 @@ namespace EVEMon.Common.Data
         /// </summary>
         /// <param name="name">The name.</param>
         /// <returns></returns>
-        public static Agent GetAgentByName(string name) => s_agentsByID.Values.FirstOrDefault(
-            agent => agent.Name.Equals(name, StringComparison.InvariantCulture));
+        public static Agent GetAgentByName(string name)
+        {
+            var agent = s_agentsByID.Values.FirstOrDefault(x => x.Name.Equals(name,
+                StringComparison.InvariantCulture));
+            if (agent != null)
+                return agent;
+
+            // Contact names come from ESI in English; resolve them to the Chinese datafile names
+            string chineseName = NameAlias.Resolve(name);
+            return chineseName == name ? null : s_agentsByID.Values.FirstOrDefault(x => x.Name.Equals(
+                chineseName, StringComparison.InvariantCulture));
+        }
 
         /// <summary>
         /// Gets the faction with the provided ID.

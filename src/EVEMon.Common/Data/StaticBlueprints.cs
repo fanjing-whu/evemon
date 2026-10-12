@@ -23,7 +23,7 @@ namespace EVEMon.Common.Data
             if (BlueprintMarketGroups != null)
                 return;
 
-            BlueprintsDatafile datafile = Util.DeserializeDatafile<BlueprintsDatafile>(DatafileConstants.BlueprintsDatafile,
+            BlueprintsDatafile datafile = Util.DeserializeDatafile<BlueprintsDatafile>(DatafileConstants.BlueprintsDatafileLocalized,
                 Util.LoadXslt(Properties.Resources.DatafilesXSLT));
 
             BlueprintMarketGroups = new BlueprintMarketGroupCollection(null, datafile.MarketGroups);
@@ -93,7 +93,16 @@ namespace EVEMon.Common.Data
         /// <param name="blueprintName">The name of the blueprint to find.</param>
         /// <returns>The first blueprint which name matches blueprintName, Null if no such blueprint is found.</returns>
         public static Blueprint GetBlueprintByName(string blueprintName)
-            => s_blueprintsByID.Values.FirstOrDefault(x => x.Name == blueprintName);
+        {
+            var blueprint = s_blueprintsByID.Values.FirstOrDefault(x => x.Name == blueprintName);
+            if (blueprint != null)
+                return blueprint;
+
+            // Blueprint names from external sources stay English - resolve via the alias table
+            string chineseName = NameAlias.Resolve(blueprintName);
+            return chineseName == blueprintName ? null : s_blueprintsByID.Values.FirstOrDefault(
+                x => x.Name == chineseName);
+        }
 
         #endregion
     }

@@ -18,7 +18,7 @@ namespace EVEMon.Common.Data
         internal static void Load()
         {
             ReprocessingDatafile datafile = Util.DeserializeDatafile<ReprocessingDatafile>(
-                DatafileConstants.ReprocessingDatafile, Util.LoadXslt(Properties.Resources.DatafilesXSLT));
+                DatafileConstants.ReprocessingDatafileLocalized, Util.LoadXslt(Properties.Resources.DatafilesXSLT));
 
             foreach (SerializableItemMaterials item in datafile.Items)
             {

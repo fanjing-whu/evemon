@@ -28,7 +28,7 @@ namespace EVEMon.Common.Data
                 return;
 
             // Deserialize the items datafile
-            ItemsDatafile datafile = Util.DeserializeDatafile<ItemsDatafile>(DatafileConstants.ItemsDatafile,
+            ItemsDatafile datafile = Util.DeserializeDatafile<ItemsDatafile>(DatafileConstants.ItemsDatafileLocalized,
                 Util.LoadXslt(Properties.Resources.DatafilesXSLT));
 
             LoadFromDatafile(datafile);
@@ -148,7 +148,17 @@ namespace EVEMon.Common.Data
         /// <param name="itemName">The name of the item to find.</param>
         /// <returns>The first item which name matches itemName, Null if no such item is found.</returns>
         public static Item GetItemByName(string itemName)
-            => s_itemsByID.Values.FirstOrDefault(item => item.Name == itemName);
+        {
+            var item = s_itemsByID.Values.FirstOrDefault(x => x.Name == itemName);
+            if (item != null)
+                return item;
+
+            // English names (ESI responses, EFT text, fitting XML) must keep working now
+            // that the datafiles carry Chinese names
+            string chineseName = NameAlias.Resolve(itemName);
+            return chineseName == itemName ? null : s_itemsByID.Values.FirstOrDefault(
+                x => x.Name == chineseName);
+        }
 
         #endregion
     }

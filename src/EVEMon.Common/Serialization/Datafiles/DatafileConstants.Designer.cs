@@ -134,6 +134,8 @@ namespace EVEMon.Common.Serialization.Datafiles {
 
         /// <summary>
         /// Gets the datafile name with the correct language suffix based on server type.
+        /// Falls back to the English datafile when the localized one is absent, so that a
+        /// missing Chinese datafile can never prevent startup.
         /// </summary>
         /// <param name="baseName">The base datafile name without language suffix.</param>
         /// <returns>The datafile name with appropriate language suffix.</returns>
@@ -141,7 +143,25 @@ namespace EVEMon.Common.Serialization.Datafiles {
         {
             string languageSuffix = Models.EveServerConfig.CurrentServerType == 
                 Enumerations.EveServerType.Seren ? "-zh-CN" : "-en-US";
-            return baseName + languageSuffix + ".xml.gzip";
+            string localized = baseName + languageSuffix + ".xml.gzip";
+            if (languageSuffix == "-zh-CN" && !LocalizedDatafileExists(localized))
+                return baseName + "-en-US.xml.gzip";
+            return localized;
+        }
+
+        /// <summary>
+        /// Checks whether a localized datafile exists in %APPDATA%\EVEMon or the program's
+        /// Resources folder (the same two locations Datafile.GetFullPath searches).
+        /// </summary>
+        private static bool LocalizedDatafileExists(string filename)
+        {
+            string appDataDir = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "EVEMon");
+            if (System.IO.File.Exists(System.IO.Path.Combine(appDataDir, filename)))
+                return true;
+            string resourcesDir = System.IO.Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "Resources");
+            return System.IO.File.Exists(System.IO.Path.Combine(resourcesDir, filename));
         }
 
         /// <summary>

@@ -382,7 +382,9 @@ namespace EVEMon.SkillPlanner
                 }
 
                 // Check if the objects belong to an item family that has fitting slot property 
-                if (category.Name == DBConstants.GeneralCategoryName && SelectControl.SelectedObjects.Any(
+                // (the datafile may carry the Chinese category name on Seren)
+                if ((category.Name == DBConstants.GeneralCategoryName || category.Name ==
+                     NameAlias.Resolve(DBConstants.GeneralCategoryName)) && SelectControl.SelectedObjects.Any(
                     x => (x.Family == ItemFamily.Item || x.Family == ItemFamily.Drone) &&
                          x.FittingSlot != ItemSlot.NoSlot && x.FittingSlot != ItemSlot.None))
                 {

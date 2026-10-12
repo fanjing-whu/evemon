@@ -30,7 +30,7 @@ namespace EVEMon.Common.Data
         internal static void Load()
         {
             PropertiesDatafile datafile = 
-                Util.DeserializeDatafile<PropertiesDatafile>(DatafileConstants.PropertiesDatafile,
+                Util.DeserializeDatafile<PropertiesDatafile>(DatafileConstants.PropertiesDatafileLocalized,
                     Util.LoadXslt(Properties.Resources.DatafilesXSLT));
 
             // Fetch deserialized data
@@ -114,7 +114,14 @@ namespace EVEMon.Common.Data
         public static EveProperty GetPropertyByName(string name)
         {
             EveProperty property;
-            s_propertiesByName.TryGetValue(name, out property);
+            if (s_propertiesByName.TryGetValue(name, out property))
+                return property;
+
+            // Property names referenced in code (e.g. "Consumption Rate") are English
+            string chineseName = NameAlias.Resolve(name);
+            if (chineseName == name)
+                return null;
+            s_propertiesByName.TryGetValue(chineseName, out property);
             return property;
         }
 

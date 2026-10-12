@@ -21,7 +21,7 @@ namespace EVEMon.Common.Data
         internal static void Load()
         {
             MasteriesDatafile datafile = Util.DeserializeDatafile<MasteriesDatafile>(
-                DatafileConstants.MasteriesDatafile);
+                DatafileConstants.MasteriesDatafileLocalized);
 
             foreach (SerializableMasteryShip srcShip in datafile.MasteryShips)
             {

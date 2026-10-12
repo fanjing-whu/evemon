@@ -29,7 +29,7 @@ namespace EVEMon.Common.Data
         internal static void Load()
         {
             EveMonClient.Trace("StaticSkills.Load - Loading skills datafile...");
-            SkillsDatafile datafile = Util.DeserializeDatafile<SkillsDatafile>(DatafileConstants.SkillsDatafile,
+            SkillsDatafile datafile = Util.DeserializeDatafile<SkillsDatafile>(DatafileConstants.SkillsDatafileLocalized,
                 Util.LoadXslt(Properties.Resources.DatafilesXSLT));
 
             EveMonClient.Trace($"StaticSkills.Load - datafile is {(datafile == null ? "NULL" : "OK")}, SkillGroups count = {datafile?.SkillGroups?.Count ?? -1}");
@@ -147,7 +147,14 @@ namespace EVEMon.Common.Data
         public static StaticSkill GetSkillByName(string name)
         {
             StaticSkill skill;
-            s_skillsByName.TryGetValue(name, out skill);
+            if (s_skillsByName.TryGetValue(name, out skill))
+                return skill;
+
+            // Skill names from plan files / imported fittings stay English
+            string chineseName = NameAlias.Resolve(name);
+            if (chineseName == name)
+                return null;
+            s_skillsByName.TryGetValue(chineseName, out skill);
             return skill;
         }
 

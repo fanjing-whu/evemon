@@ -24,7 +24,7 @@ namespace EVEMon.Common.Data
         /// </summary>
         internal static void Load()
         {
-            CertificatesDatafile datafile = Util.DeserializeDatafile<CertificatesDatafile>(DatafileConstants.CertificatesDatafile,
+            CertificatesDatafile datafile = Util.DeserializeDatafile<CertificatesDatafile>(DatafileConstants.CertificatesDatafileLocalized,
                     Util.LoadXslt(Properties.Resources.DatafilesXSLT));
 
             AllGroups = new Collection<StaticCertificateGroup>();
@@ -90,7 +90,19 @@ namespace EVEMon.Common.Data
         /// </summary>
         /// <param name="name"></param>
         /// <returns></returns>
-        public static StaticCertificateClass GetCertificateClassByName(string name) => s_classesByName[name];
+        public static StaticCertificateClass GetCertificateClassByName(string name)
+        {
+            StaticCertificateClass certClass;
+            if (s_classesByName.TryGetValue(name, out certClass))
+                return certClass;
+
+            // Certificate class names from external sources stay English
+            string chineseName = NameAlias.Resolve(name);
+            if (chineseName == name)
+                return null;
+            s_classesByName.TryGetValue(chineseName, out certClass);
+            return certClass;
+        }
 
         #endregion
     }

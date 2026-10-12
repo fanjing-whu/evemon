@@ -163,7 +163,9 @@ namespace EVEMon.Common.Data
             try
             {
                 // Format a value of Packaged Volume
-                if (Name == DBConstants.PackagedVolumePropertyName)
+                // (the datafile may carry the Chinese name on Seren)
+                if (Name == DBConstants.PackagedVolumePropertyName || Name ==
+                    NameAlias.Resolve(DBConstants.PackagedVolumePropertyName))
                     return $"{numericValue:N1} {Unit}";
 
                 // Format a value of Structure Volume
