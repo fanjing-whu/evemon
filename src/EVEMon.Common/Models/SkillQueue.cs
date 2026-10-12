@@ -67,6 +67,32 @@ namespace EVEMon.Common.Models
         public TimeSpan BoosterDuration => !Items.Any() ? TimeSpan.Zero : TimeSpan.FromHours(Items.Select(i => i.BoosterDuration.TotalHours).Sum());
 
         /// <summary>
+        /// Gets whether the given queued skill is still covered by the active booster.
+        /// The answer is monotonic along the queue: as soon as an entry is not boosted, that
+        /// entry and every later one are reported as not boosted. This keeps the queue split
+        /// into a boosted head and a plain tail, instead of the state flipping back and forth
+        /// when entries are evaluated independently.
+        /// </summary>
+        /// <param name="skill">The queued skill to test.</param>
+        /// <returns>True when the entry lies within the booster covered part of the queue.</returns>
+        public bool IsBoosted(QueuedSkill skill)
+        {
+            if (skill == null)
+                return false;
+
+            foreach (QueuedSkill item in Items)
+            {
+                if (item.BoosterDuration <= TimeSpan.Zero)
+                    return false;
+
+                if (ReferenceEquals(item, skill))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Gets the skill currently in training.
         /// </summary>
         public QueuedSkill CurrentlyTraining => Items.FirstOrDefault();

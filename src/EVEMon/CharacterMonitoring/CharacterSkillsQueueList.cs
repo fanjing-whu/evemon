@@ -239,9 +239,9 @@ namespace EVEMon.CharacterMonitoring
 
             double fractionCompleted = e.Index == 0 ? skill.FractionCompleted : 0.0;
 
-            string indexText = $"{e.Index + 1}. {(skill.BoosterDuration > TimeSpan.Zero ? "\u26a1" : "")}";
+            string indexText = $"{e.Index + 1}. {(Character.SkillQueue.IsBoosted(skill) ? "\u26a1" : "")}";
             string rankText = $" (Rank {(skill.Skill == null ? 0 : skill.Rank)})";
-            string spPerHourText = $" SP/Hour: {(skill.BoosterDuration > TimeSpan.Zero ? skill.SkillPointsPerHour : skill.SkillPointsPerHourWithoutBoosters)}";
+            string spPerHourText = $" SP/Hour: {(Character.SkillQueue.IsBoosted(skill) ? skill.SkillPointsPerHour : skill.SkillPointsPerHourWithoutBoosters)}";
             string spText = $"SP: {skillPoints:N0}/{skillPointsToNextLevel:N0}";
             string trainingTimeText = $" Training Time: {remainingTimeText}";
             string levelText = $"Level {skill.Level}";
@@ -768,7 +768,9 @@ namespace EVEMon.CharacterMonitoring
             toolTip.AppendLine().AppendLine(skill.Skill.Description.WordWrap(100));
             toolTip.Append("Primary: ").Append(skill.Skill.PrimaryAttribute).Append(", ");
             toolTip.Append("Secondary: ").Append(skill.Skill.SecondaryAttribute).Append(" (");
-            toolTip.AppendFormat("{0:F0}", skill.BoosterDuration > TimeSpan.Zero ? skill.SkillPointsPerHour : skill.SkillPointsPerHourWithoutBoosters).Append(" SP/Hour)");
+            // Use the queue wide answer so the boosted part stays contiguous (see SkillQueue.IsBoosted).
+            bool isBoosted = (skill.Owner as CCPCharacter)?.SkillQueue.IsBoosted(skill) ?? false;
+            toolTip.AppendFormat("{0:F0}", isBoosted ? skill.SkillPointsPerHour : skill.SkillPointsPerHourWithoutBoosters).Append(" SP/Hour)");
         }
 
         /// <summary>
