@@ -1362,7 +1362,7 @@ namespace EVEMon.SettingsUI
             ProxyServerGroupBox.Controls.Add(customProxyCheckBox);
             ProxyServerGroupBox.Controls.Add(lblNetworkPageProxy);
             ProxyServerGroupBox.Controls.Add(customProxyPanel);
-            ProxyServerGroupBox.Location = new System.Drawing.Point(4, 36);
+            ProxyServerGroupBox.Location = new System.Drawing.Point(4, 176);
             ProxyServerGroupBox.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             ProxyServerGroupBox.Name = "ProxyServerGroupBox";
             ProxyServerGroupBox.Padding = new System.Windows.Forms.Padding(4, 3, 4, 3);

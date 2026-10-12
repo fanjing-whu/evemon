@@ -186,6 +186,8 @@ namespace EVEMon.SettingsUI
             // Server type
             InitializeServerTypeComboBox();
             serverTypeComboBox.SelectedIndex = (int)m_settings.ServerType;
+            UpdateESISettingsVisibility((EveServerType)serverTypeComboBox.SelectedIndex);
+            serverTypeComboBox.SelectedIndexChanged += serverTypeComboBox_SelectedIndexChanged;
 
             // Client ID / Secret
             clientIDTextBox.Text = m_settings.SSOClientID;
@@ -608,6 +610,30 @@ namespace EVEMon.SettingsUI
                 EveServerTypeHelper.GetDisplayName(EveServerType.Tranquility),
                 EveServerTypeHelper.GetDisplayName(EveServerType.Seren)
             });
+        }
+
+        /// <summary>
+        /// Shows or hides the ESI client settings depending on the selected server.
+        /// Seren (Chinese server) always uses its own public client application, so the
+        /// client ID / secret fields are meaningless there. When hidden, the proxy group
+        /// box moves up to fill the gap.
+        /// </summary>
+        /// <param name="serverType">The currently selected server type.</param>
+        private void UpdateESISettingsVisibility(EveServerType serverType)
+        {
+            bool showEsiSettings = serverType != EveServerType.Seren;
+            esiSettingsGroupBox.Visible = showEsiSettings;
+            ProxyServerGroupBox.Location = showEsiSettings
+                ? new System.Drawing.Point(4, 176)
+                : new System.Drawing.Point(4, 68);
+        }
+
+        /// <summary>
+        /// Updates the ESI settings visibility when the server type changes.
+        /// </summary>
+        private void serverTypeComboBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            UpdateESISettingsVisibility((EveServerType)serverTypeComboBox.SelectedIndex);
         }
 
         /// <summary>
