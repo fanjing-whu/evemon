@@ -272,20 +272,15 @@ namespace EVEMon.Updater
 
             /// <summary>
             /// Gets the server-specific download address for the datafile.
-            /// For Seren (Chinese server), replaces the base address with the Chinese server URL.
             /// </summary>
             /// <param name="originalAddress">The original address from the patch XML.</param>
             /// <returns>The server-specific address.</returns>
             private string GetServerSpecificAddress(string originalAddress)
             {
-                if (Settings.ServerType != EveServerType.Seren)
-                    return originalAddress;
-
-                // For Seren, use the Chinese server datafiles URL
-                // The originalAddress is typically something like https://https://https://images.evetech.net/...
-                // We replace it with the Seren equivalent
-                // Note: This is a placeholder - actual Seren datafiles location may vary
-                return NetworkConstants.DatafilesSerenBase;
+                // Datafile updates are disabled for Seren (see UpdateManager.ScanUpdateFeed),
+                // so the original address is always used. This previously returned the bare
+                // Seren base URL, which caused every datafile download to 404.
+                return originalAddress;
             }
 
             /// <summary>

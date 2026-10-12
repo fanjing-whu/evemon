@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using EVEMon.Common.Constants;
 using EVEMon.Common.Data;
+using EVEMon.Common.Enumerations;
 using EVEMon.Common.Helpers;
 using EVEMon.Common.Net;
 using EVEMon.Common.Serialization.PatchXml;
@@ -230,7 +231,10 @@ namespace EVEMon.Common
             }
 
             // New data files released?
-            if (result.FilesHaveChanged)
+            // Seren (Chinese server) has no host for EVEMon-format datafiles; its data comes
+            // from local conversion (SerenDataLoader / Pyfa-SDE converter), so the TQ feed
+            // would only produce 404 downloads. Skip the notification there.
+            if (result.FilesHaveChanged && Settings.ServerType != EveServerType.Seren)
             {
                 // Requests a notification to subscribers
                 EveMonClient.OnDataUpdateAvailable(result.ChangedDatafiles);
