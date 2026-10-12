@@ -221,8 +221,9 @@ tools/XmlGenerator/sqlite-latest.sqlite-journal
 
 # Python quick check files
 *.py
-# ...but keep the project's converter scripts under version control
-!scripts/**/*.py
+# ...but keep the project's converter tools under version control
+!scripts/generate_zh_datafiles.py
+!scripts/pyfa_to_evemon/generate_eve_skills_from_pyfa.py
 
 # Crash log
 crash_log.txt
