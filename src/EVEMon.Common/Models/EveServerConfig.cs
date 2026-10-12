@@ -96,6 +96,12 @@ namespace EVEMon.Common.Models
         public static EveServerType CurrentServerType => Settings.ServerType;
 
         /// <summary>
+        /// Seren's image server only implements the legacy CCP image API and serves
+        /// nothing below 32px, so clamp smaller requests up to 32.
+        /// </summary>
+        private static int SerenImageSize(int size) => size < 32 ? 32 : size;
+
+        /// <summary>
         /// Creates a portrait URL path with the correct tenant parameter.
         /// </summary>
         /// <param name="characterId">The character ID.</param>
@@ -103,6 +109,10 @@ namespace EVEMon.Common.Models
         /// <returns>The formatted path string.</returns>
         public static string GetPortraitPath(long characterId, int size)
         {
+            if (CurrentServerType == EveServerType.Seren)
+                // Seren only supports the legacy CCP image paths; the new
+                // /characters/{id}/portrait form redirects to an HTML error page
+                return $"/Character/{characterId}_{SerenImageSize(size)}.jpg";
             return $"/characters/{characterId}/portrait?tenant={Tenant}&size={size}";
         }
 
@@ -114,6 +124,8 @@ namespace EVEMon.Common.Models
         /// <returns>The formatted path string.</returns>
         public static string GetCorporationLogoPath(long corporationId, int size)
         {
+            if (CurrentServerType == EveServerType.Seren)
+                return $"/Corporation/{corporationId}_{SerenImageSize(size)}.png";
             return $"/corporations/{corporationId}/logo?tenant={Tenant}&size={size}";
         }
 
@@ -125,6 +137,8 @@ namespace EVEMon.Common.Models
         /// <returns>The formatted path string.</returns>
         public static string GetAllianceLogoPath(long allianceId, int size)
         {
+            if (CurrentServerType == EveServerType.Seren)
+                return $"/Alliance/{allianceId}_{SerenImageSize(size)}.png";
             return $"/alliances/{allianceId}/logo?tenant={Tenant}&size={size}";
         }
 
@@ -136,6 +150,8 @@ namespace EVEMon.Common.Models
         /// <returns>The formatted path string.</returns>
         public static string GetTypeIconPath(int typeId, int size)
         {
+            if (CurrentServerType == EveServerType.Seren)
+                return $"/Type/{typeId}_{SerenImageSize(size)}.png";
             return $"/types/{typeId}/icon?tenant={Tenant}&size={size}";
         }
 
@@ -147,6 +163,8 @@ namespace EVEMon.Common.Models
         /// <returns>The formatted path string.</returns>
         public static string GetTypeRenderPath(int typeId, int size)
         {
+            if (CurrentServerType == EveServerType.Seren)
+                return $"/Render/{typeId}_{SerenImageSize(size)}.png";
             return $"/types/{typeId}/render?tenant={Tenant}&size={size}";
         }
     }
