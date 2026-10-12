@@ -158,7 +158,19 @@ namespace EVEMon.Common.Service
                 await Task.Run(() => Data.StaticProperties.Load());
                 GlobalDatafileCollection.OnDatafileLoaded();
 
-                await Task.Run(() => Data.StaticItems.LoadFromDatafile(itemsDatafile));
+                // Load the local items datafile directly: it carries Family and Properties.
+                // The converted datafile (built from the ESI type cache) has neither, which
+                // would silently break implant identification, so it is only a fallback.
+                try
+                {
+                    await Task.Run(() => Data.StaticItems.Load());
+                }
+                catch (Exception itemsEx)
+                {
+                    EveMonClient.Trace($"SerenDataLoader: Local items datafile unavailable " +
+                        $"({itemsEx.Message}), using converted datafile");
+                    await Task.Run(() => Data.StaticItems.LoadFromDatafile(itemsDatafile));
+                }
                 GlobalDatafileCollection.OnDatafileLoaded();
 
                 // Load other static data (non-ESI)
@@ -481,27 +493,44 @@ namespace EVEMon.Common.Service
             ReportProgress(85, "Loading items...");
             try
             {
-                var itemsDatafile = ESIToDatafileConverter.LoadDatafileFromCache<Serialization.Datafiles.ItemsDatafile>(
-                    "eve-items-esi.xml.gzip");
-                if (itemsDatafile != null)
-                {
-                    // Properties must be loaded before items (implant slots and every other item
-                    // property depend on this table being populated first).
-                    await Task.Run(() => Data.StaticProperties.Load());
-                    await Task.Run(() => Data.StaticItems.LoadFromDatafile(itemsDatafile));
-                    // Notify MainWindow to update progress bar
-                    GlobalDatafileCollection.OnDatafileLoaded();
-                    itemsLoaded = true;
-                }
-                else
-                {
-                    EveMonClient.Trace("SerenDataLoader: Items datafile not found in cache");
-                }
+                // Properties must be loaded before items: every item property value resolves its
+                // definition against this table at construction time.
+                await Task.Run(() => Data.StaticProperties.Load());
+
+                // Load the local items datafile directly. Converting the ESI type cache instead
+                // drops every item attribute (Family, Properties, ...) because EsiType carries
+                // none of them, which breaks implant identification and all property based
+                // features.
+                await Task.Run(() => Data.StaticItems.Load());
+                GlobalDatafileCollection.OnDatafileLoaded();
+                itemsLoaded = true;
+                EveMonClient.Trace("SerenDataLoader: Items loaded from local datafile");
             }
             catch (Exception ex)
             {
-                EveMonClient.Trace($"SerenDataLoader: Failed to load items: {ex.Message}");
-                ExceptionHandler.LogException(ex, false);
+                EveMonClient.Trace($"SerenDataLoader: Local items datafile unavailable ({ex.Message}), " +
+                    "falling back to the ESI cache");
+                try
+                {
+                    var itemsDatafile = ESIToDatafileConverter.LoadDatafileFromCache<Serialization.Datafiles.ItemsDatafile>(
+                        "eve-items-esi.xml.gzip");
+                    if (itemsDatafile != null)
+                    {
+                        await Task.Run(() => Data.StaticItems.LoadFromDatafile(itemsDatafile));
+                        // Notify MainWindow to update progress bar
+                        GlobalDatafileCollection.OnDatafileLoaded();
+                        itemsLoaded = true;
+                    }
+                    else
+                    {
+                        EveMonClient.Trace("SerenDataLoader: Items datafile not found in cache");
+                    }
+                }
+                catch (Exception inner)
+                {
+                    EveMonClient.Trace($"SerenDataLoader: Failed to load items: {inner.Message}");
+                    ExceptionHandler.LogException(inner, false);
+                }
             }
 
             // Load skills — 3-level fallback:
