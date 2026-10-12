@@ -69,7 +69,7 @@ namespace EVEMon.Common.Service
                     EveMonClient.Trace("SerenDataLoader: No cache found, using local TQ resource");
                     ReportProgress(10, "Loading from local TQ resource...");
                     
-                    bool localLoaded = await LoadFromLocalTQResourceAsync();
+                    bool localLoaded = await LoadFromLocalResourceAsync();
                     if (!localLoaded)
                     {
                         EveMonClient.Trace("SerenDataLoader: Local TQ resource not available, queuing ESI download");
@@ -129,15 +129,15 @@ namespace EVEMon.Common.Service
         }
 
         /// <summary>
-        /// Loads data from local TQ resource (eve-items-en-US.xml.gzip).
+        /// Loads data from local resource files (TQ SDE items + Pyfa/TQ skills).
         /// This is the primary path when ESI cache is not available.
         /// </summary>
-        private static async Task<bool> LoadFromLocalTQResourceAsync()
+        private static async Task<bool> LoadFromLocalResourceAsync()
         {
             try
             {
-                ReportProgress(15, "Loading TQ type details...");
-                var tqCache = await ESISdeDownloader.LoadTQTypeDetailsFromLocalResourceAsync();
+                ReportProgress(15, "Loading local type details...");
+                var tqCache = await ESISdeDownloader.LoadLocalTypeDetailsAsync();
                 if (tqCache.Count == 0)
                 {
                     EveMonClient.Trace("SerenDataLoader: Local TQ resource not found");
@@ -166,9 +166,9 @@ namespace EVEMon.Common.Service
                 await Task.Run(() => Data.StaticBlueprints.Load());
                 GlobalDatafileCollection.OnDatafileLoaded();
 
-                ReportProgress(90, "Loading skills...");
-                // Load skills from local TQ resource directly (bypassing ESI cache which may be empty)
-                await Task.Run(() => LoadSkillsFromTQResource());
+                ReportProgress(90, "Loading skills (Pyfa/TQ fallback)...");
+                // Level 2 → Level 3 → Level 4 (ESI not available at this point)
+                await Task.Run(() => LoadSkillsWithFallback());
                 GlobalDatafileCollection.OnDatafileLoaded();
 
                 ReportProgress(95, "Loading reprocessing...");
@@ -226,32 +226,58 @@ namespace EVEMon.Common.Service
         }
 
         /// <summary>
-        /// Loads skills from the local TQ resource file (eve-skills-en-US.xml.gzip).
-        /// This bypasses the ESI cache which may be empty or incomplete.
+        /// Loads skills using the three-level fallback strategy for Seren mode:
+        ///   Level 1: ESI cache (Seren Chinese data) — already handled by caller
+        ///   Level 2: Pyfa static data (Chinese names, eve-skills-pyfa-zh-CN.xml.gzip)
+        ///   Level 3: TQ SDE static data (English names, eve-skills-en-US.xml.gzip)
+        ///   Level 4: Error — log and throw so the caller knows nothing loaded
         /// </summary>
-        private static void LoadSkillsFromTQResource()
+        private static void LoadSkillsWithFallback()
         {
-            string[] possiblePaths = new[]
+            // Level 2: Pyfa Chinese static data
+            if (TryLoadSkillsFromFile("eve-skills-pyfa-zh-CN.xml.gzip", "Pyfa Chinese static data (zh-CN)"))
+                return;
+
+            // Level 3: TQ SDE English static data
+            if (TryLoadSkillsFromFile("eve-skills-en-US.xml.gzip", "TQ SDE English static data (en-US)"))
+                return;
+
+            // Level 4: Nothing loaded — report error
+            EveMonClient.Trace("SerenDataLoader: [ERROR] All skill data sources exhausted. No skills loaded.");
+            EveMonClient.Trace("SerenDataLoader: [ERROR] Expected files in Resources/: eve-skills-pyfa-zh-CN.xml.gzip or eve-skills-en-US.xml.gzip");
+            throw new InvalidOperationException(
+                "Seren mode: Failed to load skill data from all sources. " +
+                "Tried: ESI cache, Pyfa Chinese (eve-skills-pyfa-zh-CN.xml.gzip), TQ SDE (eve-skills-en-US.xml.gzip). " +
+                "Please ensure at least one data file exists in the Resources folder.");
+        }
+
+        /// <summary>
+        /// Attempts to load skills from a gzip XML file by filename.
+        /// Searches in Resources/ folder and AppData/EVEMon/ folder.
+        /// </summary>
+        /// <param name="filename">The filename to look for (e.g., "eve-skills-pyfa-zh-CN.xml.gzip").</param>
+        /// <param name="sourceName">Human-readable name for logging.</param>
+        /// <returns>True if skills were loaded successfully.</returns>
+        private static bool TryLoadSkillsFromFile(string filename, string sourceName)
+        {
+            string[] searchPaths = new[]
             {
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "eve-skills-en-US.xml.gzip"),
-                Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "EVEMon", "eve-skills-en-US.xml.gzip"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", filename),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "EVEMon", filename),
             };
 
-            foreach (string path in possiblePaths)
+            foreach (string path in searchPaths)
             {
+                if (!File.Exists(path))
+                    continue;
+
                 try
                 {
-                    if (!File.Exists(path))
-                        continue;
-
-                    EveMonClient.Trace($"SerenDataLoader: Loading skills from {path}");
+                    EveMonClient.Trace($"SerenDataLoader: [Level2/3] Loading skills from {sourceName}: {path}");
 
                     using var stream = File.OpenRead(path);
                     using var gzipStream = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
 
-                    // Use XmlReaderSettings to ignore namespaces that may cause deserialization issues
                     var settings = new System.Xml.XmlReaderSettings
                     {
                         IgnoreWhitespace = true,
@@ -264,20 +290,30 @@ namespace EVEMon.Common.Service
 
                     if (serializer.Deserialize(reader) is Serialization.Datafiles.SkillsDatafile datafile)
                     {
-                        EveMonClient.Trace($"SerenDataLoader: SkillsDatafile loaded, SkillGroups = {datafile.SkillGroups?.Count ?? -1}");
+                        bool hasSkills = datafile.SkillGroups?.Count > 0 &&
+                                         datafile.SkillGroups.Any(g => g.Skills?.Count > 0);
+
+                        if (!hasSkills)
+                        {
+                            EveMonClient.Trace($"SerenDataLoader: {sourceName} loaded but has no skills — skipping.");
+                            continue;
+                        }
+
+                        EveMonClient.Trace($"SerenDataLoader: {sourceName} OK — {datafile.SkillGroups.Count} groups, " +
+                                           $"{datafile.SkillGroups.Sum(g => g.Skills?.Count ?? 0)} skills");
                         Data.StaticSkills.LoadFromDatafile(datafile);
-                        return;
+                        return true;
                     }
+
+                    EveMonClient.Trace($"SerenDataLoader: {sourceName} deserialization returned null.");
                 }
                 catch (Exception ex)
                 {
-                    EveMonClient.Trace($"SerenDataLoader: Failed to load skills from {path}: {ex.Message}");
+                    EveMonClient.Trace($"SerenDataLoader: {sourceName} failed at {path}: {ex.Message}");
                 }
             }
 
-            EveMonClient.Trace("SerenDataLoader: Could not find skills datafile, falling back to default Load()");
-            // Fallback to the original method
-            Data.StaticSkills.Load();
+            return false;
         }
 
         /// <summary>
@@ -457,48 +493,64 @@ namespace EVEMon.Common.Service
                 ExceptionHandler.LogException(ex, false);
             }
 
-            // Load skills
+            // Load skills — 3-level fallback:
+            //   Level 1: ESI cache (Seren Chinese, eve-skills-esi.xml.gzip)
+            //   Level 2: Pyfa Chinese static data (eve-skills-pyfa-zh-CN.xml.gzip)
+            //   Level 3: TQ SDE English static data (eve-skills-en-US.xml.gzip)
+            //   Level 4: Error
             ReportProgress(90, "Loading skills...");
             try
             {
-                EveMonClient.Trace("SerenDataLoader: Loading skills from ESI cache...");
+                // Level 1: try ESI cache
+                EveMonClient.Trace("SerenDataLoader: [Level1] Loading skills from Seren ESI cache...");
                 var skillsDatafile = ESIToDatafileConverter.LoadDatafileFromCache<Serialization.Datafiles.SkillsDatafile>(
                     "eve-skills-esi.xml.gzip");
 
-                // Check if the skills datafile is valid (has groups with skills)
                 bool hasValidSkills = skillsDatafile != null &&
                     skillsDatafile.SkillGroups?.Count > 0 &&
                     skillsDatafile.SkillGroups.Any(g => g.Skills?.Count > 0);
 
-                EveMonClient.Trace($"SerenDataLoader: Skills datafile from cache = {(skillsDatafile == null ? "NULL" : "OK, SkillGroups=" + skillsDatafile.SkillGroups?.Count + ", HasSkills=" + hasValidSkills)}");
-
                 if (hasValidSkills)
                 {
+                    EveMonClient.Trace($"SerenDataLoader: [Level1] ESI skills OK — {skillsDatafile.SkillGroups.Count} groups, " +
+                                       $"{skillsDatafile.SkillGroups.Sum(g => g.Skills?.Count ?? 0)} skills");
                     await Task.Run(() => Data.StaticSkills.LoadFromDatafile(skillsDatafile));
                     GlobalDatafileCollection.OnDatafileLoaded();
                     skillsLoaded = true;
                 }
                 else
                 {
-                    EveMonClient.Trace("SerenDataLoader: ESI skills cache is empty/invalid, loading from local TQ resource...");
-                    // Fallback to loading from local TQ resource
-                    await Task.Run(() => LoadSkillsFromTQResource());
-                    GlobalDatafileCollection.OnDatafileLoaded();
-                    skillsLoaded = true; // Even if it fails, we tried the fallback
-                }
-            }
-            catch (Exception ex)
-            {
-                EveMonClient.Trace($"SerenDataLoader: Failed to load skills: {ex.Message}");
-                ExceptionHandler.LogException(ex, false);
-                // Try fallback
-                try
-                {
-                    await Task.Run(() => LoadSkillsFromTQResource());
+                    EveMonClient.Trace("SerenDataLoader: [Level1] ESI skills cache is empty/invalid, trying Level 2/3...");
+                    // Level 2 & 3 handled inside LoadSkillsWithFallback()
+                    await Task.Run(() => LoadSkillsWithFallback());
                     GlobalDatafileCollection.OnDatafileLoaded();
                     skillsLoaded = true;
                 }
-                catch { }
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Level 4: all sources exhausted — this is a real error
+                EveMonClient.Trace($"SerenDataLoader: [Level4 ERROR] {ex.Message}");
+                ExceptionHandler.LogException(ex, true);
+                skillsLoaded = false;
+            }
+            catch (Exception ex)
+            {
+                EveMonClient.Trace($"SerenDataLoader: Unexpected error loading skills: {ex.Message}");
+                ExceptionHandler.LogException(ex, false);
+                // Still try Level 2/3
+                try
+                {
+                    await Task.Run(() => LoadSkillsWithFallback());
+                    GlobalDatafileCollection.OnDatafileLoaded();
+                    skillsLoaded = true;
+                }
+                catch (InvalidOperationException innerEx)
+                {
+                    EveMonClient.Trace($"SerenDataLoader: [Level4 ERROR] {innerEx.Message}");
+                    skillsLoaded = false;
+                }
+                catch { /* Suppress to allow startup to continue */ }
             }
 
             // If core data (items or skills) failed to load, return false
