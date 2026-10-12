@@ -24,11 +24,15 @@ OUTPUT_DIR = r'D:\Works\codes\fanjing\evemon_cn\evemon\src\EVEMon\bin\Release\ne
 OUTPUT_FILE_ZH = os.path.join(OUTPUT_DIR, 'eve-skills-pyfa-zh-CN.xml.gzip')
 OUTPUT_FILE_EN = os.path.join(OUTPUT_DIR, 'eve-skills-en-US.xml.gzip')
 
-# Attribute ID mapping
+# Attribute ID mapping.
+# Verified against Pyfa FSD dogmaattributes.0.json:
+#   164 = charisma, 165 = intelligence, 166 = memory, 167 = perception, 168 = willpower
+# (The three first entries were previously shifted by one, which swapped
+#  intelligence/memory/charisma on every generated skill.)
 ATTR_NAMES = {
-    164: 'intelligence',
-    165: 'memory',
-    166: 'charisma',
+    164: 'charisma',
+    165: 'intelligence',
+    166: 'memory',
     167: 'perception',
     168: 'willpower'
 }
