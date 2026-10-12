@@ -173,7 +173,7 @@ namespace EVEMon.CharacterMonitoring
             TimeSpan booster = ccpCharacter.SkillQueue.BoosterDuration;
             if (booster.TotalSeconds > 0)
             {
-                lblSPPerHour.Text += string.Format(", Booster: ~{0}:{1}", (int)booster.TotalHours, booster.ToString("mm"));
+                lblSPPerHour.Text += string.Format(", Booster 时长[等效]: ~{0}:{1}", (int)booster.TotalHours, booster.ToString("mm"));
             }
 
             // Do not show the "DOWNTIME" warning if character's skill queue has more than one skills

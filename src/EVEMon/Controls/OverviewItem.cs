@@ -387,12 +387,15 @@ namespace EVEMon.Controls
             if (boosterDuration > TimeSpan.Zero)
             {
                 lblBoosterDuration.Visible = true;
-                lblBoosterDuration.Text = string.Format("Booster Duration: ~{0}:{1}", (int)boosterDuration.TotalHours, boosterDuration.ToString("mm"));
+                // The value is derived (see QueuedSkill.BoosterDuration / SkillQueue.BoosterDuration):
+                // it sums an equivalent duration per queue entry, so it is not the remaining
+                // booster time. Label it accordingly.
+                lblBoosterDuration.Text = string.Format("Booster 时长[等效]: ~{0}:{1}", (int)boosterDuration.TotalHours, boosterDuration.ToString("mm"));
             }
             else
             {
                 lblBoosterDuration.Visible = false;
-                lblBoosterDuration.Text = "No active booster";
+                lblBoosterDuration.Text = "无激活的加速器";
             }
 
             UpdateExtraData();
