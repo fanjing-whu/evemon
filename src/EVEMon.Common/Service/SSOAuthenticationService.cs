@@ -36,8 +36,8 @@ namespace EVEMon.Common.Service
 
             if (isSeren)
             {
-                // Seren server: Always use public client ID with Implicit Flow (no secret)
-                // Note: Seren has a limit of max 4 scopes per authorization request
+                // Seren server: Always use public client ID with Authorization Code Flow (no secret)
+                // Full 41 scopes are supported (verified against ali-esi swagger.json, 2026-10-11)
                 authService = new SSOAuthenticationService(
                     NetworkConstants.SSOSerenDefaultAppID,
                     null, NetworkConstants.SSOSerenScopes, isSeren: true);
@@ -162,6 +162,17 @@ namespace EVEMon.Common.Service
         {
             var obtained = DateTime.UtcNow;
             var url = new Uri(EveServerConfig.SSOBaseV2 + NetworkConstants.SSOToken);
+            // Forensic log: identify the grant type without leaking token values
+            string grant = "unknown";
+            int grantStart = data.IndexOf("grant_type=", StringComparison.Ordinal);
+            if (grantStart >= 0)
+            {
+                int grantEnd = data.IndexOf('&', grantStart);
+                grant = grantEnd > grantStart
+                    ? data.Substring(grantStart, grantEnd - grantStart)
+                    : data.Substring(grantStart);
+            }
+            EveMonClient.Trace($"SSO: Requesting token from {url} ({grant})");
             var rp = new RequestParams()
             {
                 Content = data,
@@ -182,12 +193,19 @@ namespace EVEMon.Common.Service
                 {
                     // Log HTTP error if it occurred
                     if (taskResult.Error != null)
+                    {
+                        EveMonClient.Trace($"SSO: Token request failed: {taskResult.Error.Message} " +
+                            "(server error body, if any, is traced by the HTTP layer)");
                         ExceptionHandler.LogException(taskResult.Error, true);
+                    }
                     else if (!string.IsNullOrEmpty(encodedToken = taskResult.Result))
                         // For some reason the JWT token is not returned according to the ESI
                         // spec
                         response = TokenFromString(encodedToken, false, obtained);
                 }
+                if (response == null)
+                    EveMonClient.Trace($"SSO: Token request ({grant}) did not yield a token; " +
+                        "invoking callback with null.");
                 Dispatcher.Invoke(() => callback?.Invoke(response));
             });
         }
@@ -275,13 +293,11 @@ namespace EVEMon.Common.Service
             if (m_isSeren)
             {
                 // Seren: Authorization Code Flow - exchange code for token via POST request
-                // Format: grant_type=authorization_code&code={code}&client_id={client_id}&redirect_uri={redirect_uri}&code_verifier={code_verifier}
-                // Reference: Pyfa sends code_verifier even for Seren
+                // Body matches pyfa's verified implementation exactly: no redirect_uri
+                // (pyfa sends only grant_type/code/client_id/code_verifier)
                 FetchToken(string.Format(
-                    "grant_type=authorization_code&code={0}&client_id={1}&redirect_uri={2}&code_verifier={3}",
-                    WebUtility.UrlEncode(authCode), m_clientID,
-                    WebUtility.UrlEncode(NetworkConstants.SSOSerenRedirect),
-                    m_codeVerifier), callback, false);
+                    "grant_type=authorization_code&code={0}&client_id={1}&code_verifier={2}",
+                    WebUtility.UrlEncode(authCode), m_clientID, m_codeVerifier), callback, false);
                 return;
             }
 

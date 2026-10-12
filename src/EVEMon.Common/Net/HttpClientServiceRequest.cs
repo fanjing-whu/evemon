@@ -120,7 +120,15 @@ namespace EVEMon.Common.Net
             }
             else if (code != HttpStatusCode.NotModified)
             {
-                if (response.RequestMessage.RequestUri.ToString().StartsWith(NetworkConstants.ESIBase) && !response.IsSuccessStatusCode)
+                // Trace error response bodies for ESI and SSO requests (TQ and Seren)
+                // so authentication failures can be diagnosed from the log
+                string requestUriStr = response.RequestMessage.RequestUri.ToString();
+                string esiBaseCurrent = EveServerConfig.ESIBase.ToString().TrimEnd('/');
+                string ssoBaseCurrent = EveServerConfig.SSOBaseV2.ToString().TrimEnd('/');
+                bool isEsiOrSsoRequest = requestUriStr.StartsWith(NetworkConstants.ESIBase)
+                    || requestUriStr.StartsWith(esiBaseCurrent)
+                    || requestUriStr.StartsWith(ssoBaseCurrent);
+                if (isEsiOrSsoRequest && !response.IsSuccessStatusCode)
                 {
                     String body = response.Content.ReadAsStringAsync().Result;
 

@@ -220,9 +220,10 @@ namespace EVEMon.ApiCredentialsManagement
         /// </summary>
         private void GoToResults(AccessResponse response)
         {
-            // Fail if an empty response is received
-            bool failed = string.IsNullOrEmpty(response?.AccessToken) || string.IsNullOrEmpty(
-                response?.RefreshToken);
+            // Fail if no access token was received. A missing refresh_token must NOT fail
+            // the import (pyfa stores it conditionally as well); the key simply won't be
+            // refreshable after the access token expires.
+            bool failed = string.IsNullOrEmpty(response?.AccessToken);
             // If the arguments have not been invalidated since the last time...
             if (m_creationArgs != null)
                 MultiPanel.SelectedPage = ResultPage;
