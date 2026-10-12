@@ -231,7 +231,12 @@ namespace EVEMon.Common.Service
                     }
                     // info should never be null at this stage
                     info.OnRequestStart(esiKey);
-                    // Query ESI for the citadel information
+                    // Query ESI for the citadel information.
+                    // Verified 2026-10-11: Seren (ali-esi) swagger.json declares
+                    // /universe/structures/{structure_id}/ with scope esi-universe.read_structures.v1,
+                    // which is part of SSOSerenScopes. The earlier "not supported on Chinese
+                    // servers" finding was most likely a stale-token 403 mis-attributed.
+                    // A 404 response is tolerated gracefully in OnQueryStationUpdatedEsi.
                     // No response is given because requests are only made to ESI once per
                     // key per session
                     EveMonClient.APIProviders.CurrentProvider.QueryEsi<EsiAPIStructure>(
@@ -261,7 +266,18 @@ namespace EVEMon.Common.Service
                 // FIXME: Hammertime has been nuked from orbit
                 if (result.HasError)
                 {
-                    if (result.ResponseCode != (int)HttpStatusCode.NotFound)
+                    // 404 = structure no longer exists; 403 = the character has no docking or
+                    // access rights to that structure (normal for other players' citadels,
+                    // and very common on Seren). Neither indicates a fault, so only unexpected
+                    // errors raise a notification; the location simply falls back to
+                    // "inaccessible" above.
+                    if (result.ResponseCode == (int)HttpStatusCode.NotFound ||
+                        result.ResponseCode == (int)HttpStatusCode.Forbidden)
+                    {
+                        EveMonClient.Trace("Citadel lookup for {0:D} returned {1}; treating as " +
+                            "inaccessible structure.", info.ID, result.ResponseCode);
+                    }
+                    else
                         EveMonClient.Notifications.NotifyCitadelQueryError(result);
                     info.OnRequestComplete(null);
                 }
