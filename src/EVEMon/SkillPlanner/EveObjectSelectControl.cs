@@ -423,8 +423,12 @@ namespace EVEMon.SkillPlanner
                 return;
             }
 
-            if (item.Name.Contains(searchText, ignoreCase: true)
-                || item.Description.Contains(searchText, ignoreCase: true))
+            // Match on the name only. The description used to be searched too, but with
+            // Chinese datafiles the descriptions may still contain English text, so any
+            // three-letter search term would match unrelated items (searching "net" hit
+            // "kinetic", "magnetic" and "planetary"). NameAlias also accepts the English
+            // name of a Chinese item, so both languages keep working.
+            if (NameAlias.MatchesName(item.Name, searchText))
             {
                 filteredItems.Add(item);
             }

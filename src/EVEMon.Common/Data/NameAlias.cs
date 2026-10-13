@@ -21,6 +21,7 @@ namespace EVEMon.Common.Data
         private const string AliasFilename = "eve-name-alias-zh.txt.gzip";
 
         private static Dictionary<string, string> s_englishToChinese;
+        private static Dictionary<string, List<string>> s_chineseToEnglish;
         private static readonly object s_lock = new object();
 
         /// <summary>
@@ -44,6 +45,81 @@ namespace EVEMon.Common.Data
                 return name;
 
             return map.TryGetValue(name, out string chinese) ? chinese : name;
+        }
+
+        /// <summary>
+        /// Returns true when the Chinese name matches the search text, either directly or
+        /// through one of its English counterparts in the alias table.
+        ///
+        /// The search boxes used to look at the description as well, which produced a lot of
+        /// noise once the datafiles were translated: searching "net" matched every item whose
+        /// English description contained "kinetic", "magnetic" or "planetary".
+        /// </summary>
+        /// <param name="name">The Chinese name of the object.</param>
+        /// <param name="searchText">The text typed in the search box.</param>
+        /// <returns>True when the object should be listed.</returns>
+        public static bool MatchesName(string name, string searchText)
+        {
+            if (string.IsNullOrEmpty(searchText))
+                return true;
+
+            if (string.IsNullOrEmpty(name))
+                return false;
+
+            if (name.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+
+            // Aliases only make sense for the Chinese datafiles
+            if (EveServerConfig.CurrentServerType != EveServerType.Seren)
+                return false;
+
+            var reverse = GetReverseMap();
+            if (reverse.Count == 0)
+                return false;
+
+            if (!reverse.TryGetValue(name, out List<string> englishNames))
+                return false;
+
+            foreach (string englishName in englishNames)
+            {
+                if (englishName.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Builds the Chinese to English view of the alias table once, on first use.
+        /// </summary>
+        private static Dictionary<string, List<string>> GetReverseMap()
+        {
+            if (s_chineseToEnglish != null)
+                return s_chineseToEnglish;
+
+            lock (s_lock)
+            {
+                if (s_chineseToEnglish != null)
+                    return s_chineseToEnglish;
+
+                var reverse = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+                foreach (KeyValuePair<string, string> pair in GetMap())
+                {
+                    if (string.IsNullOrEmpty(pair.Key) || string.IsNullOrEmpty(pair.Value))
+                        continue;
+
+                    if (!reverse.TryGetValue(pair.Value, out List<string> englishNames))
+                    {
+                        englishNames = new List<string>(1);
+                        reverse[pair.Value] = englishNames;
+                    }
+
+                    englishNames.Add(pair.Key);
+                }
+
+                s_chineseToEnglish = reverse;
+                return s_chineseToEnglish;
+            }
         }
 
         /// <summary>

@@ -460,12 +460,12 @@ namespace EVEMon.SkillPlanner
             Func<Skill, bool> predicate = GetFilter();
             skills = skills.Where(predicate);
 
-            // Text search
+            // Text search. Only the name is matched; see NameAlias.MatchesName for why the
+            // description is no longer searched.
             if (!string.IsNullOrEmpty(tbSearchText.Text))
             {
                 skills = skills
-                    .Where(skill => skill.Name.Contains(tbSearchText.Text, ignoreCase: true)
-                                    || skill.Description.Contains(tbSearchText.Text, ignoreCase: true));
+                    .Where(skill => NameAlias.MatchesName(skill.Name, tbSearchText.Text));
             }
 
             // When sorting by "time to...", remove lv5 skills
