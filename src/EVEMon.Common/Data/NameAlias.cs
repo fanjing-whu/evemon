@@ -82,8 +82,31 @@ namespace EVEMon.Common.Data
 
             foreach (string englishName in englishNames)
             {
-                if (englishName.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0)
+                if (MatchesWordPrefix(englishName, searchText))
                     return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Returns true when the search text starts a word inside the text. Matching on
+        /// word starts keeps short queries out of the middle of longer words: searching
+        /// "net" must not match "kinetic" or "magnetic".
+        /// </summary>
+        private static bool MatchesWordPrefix(string text, string searchText)
+        {
+            int index = text.IndexOf(searchText, StringComparison.OrdinalIgnoreCase);
+            while (index >= 0)
+            {
+                if (index == 0 || !char.IsLetterOrDigit(text[index - 1]))
+                    return true;
+
+                int next = index + 1;
+                if (next >= text.Length)
+                    return false;
+
+                index = text.IndexOf(searchText, next, StringComparison.OrdinalIgnoreCase);
             }
 
             return false;
