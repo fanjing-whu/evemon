@@ -224,6 +224,7 @@ tools/XmlGenerator/sqlite-latest.sqlite-journal
 # ...but keep the project's converter tools under version control
 !scripts/generate_zh_datafiles.py
 !scripts/pyfa_to_evemon/generate_eve_skills_from_pyfa.py
+!scripts/inject_serenity_items.py
 
 # Crash log
 crash_log.txt
