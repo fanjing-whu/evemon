@@ -44,6 +44,8 @@ import pickle
 import re
 import shutil
 import sys
+import zipfile
+import xml.etree.ElementTree as ET
 from collections import Counter
 
 # --------------------------------------------------------------------------
@@ -55,6 +57,14 @@ RESFILES = os.path.join(EVE_CACHE, 'ResFiles')
 
 # TQ SDE translation table
 TRN_TRANSLATIONS = r'C:\Users\Fanjing\AppData\Local\EveAutomation\sde\trnTranslations.csv'
+
+# Serenity market snapshot workbook (ceve-market export). Its "NPC空间站" sheet maps
+# stationID -> Chinese station name, which is the only way to translate station names:
+# they are assembled at runtime by the client and have no entry in the localization
+# pickles, and the two formats differ (EVEMon "Jita IV - Moon 4 - ..." vs the client's
+# "吉他IV-卫星4-...").
+EVEDATA_XLSX = r'D:\Works\codes\fanjing\eve_auto_botlab\eve_read_memory_64_bit\data\sde\evedata_20260830.xlsx'
+EVEDATA_STATION_SHEET = 'xl/worksheets/sheet5.xml'
 
 EVEMON_APPDATA = os.path.join(os.environ.get('APPDATA', ''), 'EVEMon')
 # EVEMon source Resources folder (version controlled). The build copies these
@@ -191,6 +201,59 @@ def load_type_translations():
     return names, descriptions
 
 
+def load_station_names():
+    """Load stationID -> Chinese station name from the Serenity market workbook.
+
+    Read with the standard library only (xlsx is a zip of XML), so the script has no
+    third-party dependency.
+    """
+    if not os.path.isfile(EVEDATA_XLSX):
+        print(f'  !! 站名数据表不存在: {EVEDATA_XLSX}')
+        return {}
+
+    ns = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
+    with zipfile.ZipFile(EVEDATA_XLSX) as z:
+        shared = [''.join(t.text or '' for t in si.iter(ns + 't'))
+                  for si in ET.fromstring(z.read('xl/sharedStrings.xml'))]
+        sheet = ET.fromstring(z.read(EVEDATA_STATION_SHEET))
+
+    names = {}
+    for row in sheet.findall(f'{ns}sheetData/{ns}row'):
+        values = []
+        for cell in row.findall(f'{ns}c'):
+            node = cell.find(f'{ns}v')
+            if node is None or node.text is None:
+                values.append('')
+            elif cell.get('t') == 's':
+                values.append(shared[int(node.text)])
+            else:
+                values.append(node.text)
+        if len(values) >= 2 and values[0] and values[1] and values[0] != '空间站ID':
+            names[values[0]] = values[1]
+
+    print(f'站名表: {len(names)} 条（NPC空间站）')
+    return names
+
+
+def apply_station_names(xml, station_names, stats):
+    """Replace station names with their Chinese counterparts, looked up by station ID."""
+    pattern = re.compile(r'<stations\b[^>]*>')
+
+    def repl(m):
+        tag = m.group(0)
+        station_id = get_attr_value(tag, 'id')
+        if not station_id:
+            return tag
+        name = station_names.get(station_id)
+        if not name:
+            stats['station_miss'] += 1
+            return tag
+        stats['station_hit'] += 1
+        return set_attr_value(tag, 'name', name)
+
+    return pattern.sub(repl, xml)
+
+
 # --------------------------------------------------------------------------
 # Translation
 # --------------------------------------------------------------------------
@@ -198,6 +261,7 @@ def new_stats():
     return {
         'name_hit': 0, 'name_miss': 0,
         'desc_hit': 0, 'desc_miss': 0,
+        'station_hit': 0, 'station_miss': 0,
         'miss_samples': Counter(),
     }
 
@@ -234,11 +298,14 @@ def apply_type_descriptions(xml, element, type_descs, stats):
     return pattern.sub(repl, xml)
 
 
-def translate_datafile_xml(name, xml, en2zh, type_names, type_descs, stats):
+def translate_datafile_xml(name, xml, en2zh, type_names, type_descs, station_names, stats):
     """Apply the translation table (description) and the alias map (names)."""
     element = TYPEID_DATAFILES.get(name)
     if element:
         xml = apply_type_descriptions(xml, element, type_descs, stats)
+
+    if name == 'eve-geography' and station_names:
+        xml = apply_station_names(xml, station_names, stats)
 
     for pattern in DATAFILE_RULES[name]:
         is_desc = 'description' in pattern
@@ -262,7 +329,8 @@ def translate_datafile_xml(name, xml, en2zh, type_names, type_descs, stats):
     return xml
 
 
-def process_datafile(name, en2zh, type_names, type_descs, output_dirs, dry_run=False):
+def process_datafile(name, en2zh, type_names, type_descs, station_names, output_dirs,
+                     dry_run=False):
     """Translate one EVEMon datafile and write the -zh-CN variant."""
     src = os.path.join(EVEMON_APPDATA, f'{name}-{SRC_LANG}.xml.gzip')
     if not os.path.isfile(src):
@@ -273,7 +341,7 @@ def process_datafile(name, en2zh, type_names, type_descs, output_dirs, dry_run=F
         xml = f.read()
 
     stats = new_stats()
-    xml = translate_datafile_xml(name, xml, en2zh, type_names, type_descs, stats)
+    xml = translate_datafile_xml(name, xml, en2zh, type_names, type_descs, station_names, stats)
 
     name_total = stats['name_hit'] + stats['name_miss']
     desc_total = stats['desc_hit'] + stats['desc_miss']
@@ -281,6 +349,10 @@ def process_datafile(name, en2zh, type_names, type_descs, output_dirs, dry_run=F
     desc_rate = stats['desc_hit'] / desc_total * 100 if desc_total else 0
     print(f'  {name}: 名称 {stats["name_hit"]}/{name_total} = {name_rate:.1f}%, '
           f'描述 {stats["desc_hit"]}/{desc_total} = {desc_rate:.1f}%')
+    station_total = stats['station_hit'] + stats['station_miss']
+    if station_total:
+        station_rate = stats['station_hit'] / station_total * 100
+        print(f'    空间站名 {stats["station_hit"]}/{station_total} = {station_rate:.1f}%')
     if stats['miss_samples']:
         top = stats['miss_samples'].most_common(3)
         print(f'    未命中样例: {[t[0][:40] for t in top]}')
@@ -340,6 +412,7 @@ def main():
     print(f'英中映射: {len(en2zh)} 条')
 
     type_names, type_descs = load_type_translations()
+    station_names = load_station_names()
 
     names = list(DATAFILE_RULES.keys())
     if args.only:
@@ -348,7 +421,8 @@ def main():
 
     print('生成中文化数据文件:')
     for name in names:
-        process_datafile(name, en2zh, type_names, type_descs, output_dirs, args.dry_run)
+        process_datafile(name, en2zh, type_names, type_descs, station_names, output_dirs,
+                         args.dry_run)
 
     write_alias_table(en2zh, output_dirs, args.dry_run)
     print('完成。')
