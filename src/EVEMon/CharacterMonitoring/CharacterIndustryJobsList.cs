@@ -1158,12 +1158,16 @@ namespace EVEMon.CharacterMonitoring
         /// <param name="e">The <see cref="System.EventArgs"/> instance containing the event data.</param>
         private void EveMonClient_ConquerableStationListUpdated(object sender, EventArgs e)
         {
-            if (Character == null)
-                return;
-
-            foreach (IndustryJob job in m_list)
+            // Station info resolved. Only refresh; do NOT bail out when Character is null.
+            // The notification window never binds a character, and its list filters on
+            // InstalledItem/OutputItem/SolarSystem, so an early return here left the window
+            // permanently empty for jobs still being looked up when it opened.
+            if (Character != null)
             {
-                job.UpdateInstallation(this.Character);
+                foreach (IndustryJob job in m_list)
+                {
+                    job.UpdateInstallation(Character);
+                }
             }
 
             UpdateColumns();

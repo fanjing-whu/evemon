@@ -1028,9 +1028,10 @@ namespace EVEMon.CharacterMonitoring
         /// <param name="e">The <see cref="System.EventArgs"/> instance containing the event data.</param>
         private void EveMonClient_ConquerableStationListUpdated(object sender, EventArgs e)
         {
-            if (Character == null)
-                return;
-
+            // Station info resolved. Only refresh; do NOT bail out when Character is null.
+            // The notification window never binds a character, and its list filters on
+            // `order.Station != null`, so an early return here left the window permanently
+            // empty for orders whose structure was still being looked up when it opened.
             foreach (MarketOrder order in m_list)
             {
                 order.UpdateStation();
