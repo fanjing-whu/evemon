@@ -81,6 +81,18 @@ namespace EVEMon.Common.Service
                 var serStation = s_cita.LookupIDESI(id, character);
                 if (serStation != null)
                     station = new Station(serStation);
+                else if (StructureNameCache.TryGet(id, out string name, out int solarSystemID))
+                    // ESI would not describe it, usually because the character has no docking
+                    // rights. Fall back to the local snapshot of public structures so the UI
+                    // shows a real name instead of "Inaccessible Structure".
+                    station = new Station(new SerializableOutpost
+                    {
+                        StationID = id,
+                        StationName = name,
+                        SolarSystemID = solarSystemID,
+                        CorporationID = 0,
+                        StationTypeID = 0
+                    });
                 else
                     station = Station.CreateInaccessible(id);
             }

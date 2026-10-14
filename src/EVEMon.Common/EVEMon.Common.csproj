@@ -239,6 +239,9 @@
     <None Update="Resources\eve-name-alias-zh.txt.gzip">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Resources\eve-structures-zh.txt.gzip">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="Resources\License\gpl.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

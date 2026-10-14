@@ -66,6 +66,12 @@ TRN_TRANSLATIONS = r'C:\Users\Fanjing\AppData\Local\EveAutomation\sde\trnTransla
 EVEDATA_XLSX = r'D:\Works\codes\fanjing\eve_auto_botlab\eve_read_memory_64_bit\data\sde\evedata_20260830.xlsx'
 EVEDATA_STATION_SHEET = 'xl/worksheets/sheet5.xml'
 EVEDATA_ITEM_SHEET = 'xl/worksheets/sheet1.xml'
+EVEDATA_STRUCTURE_SHEET = 'xl/worksheets/sheet6.xml'
+
+# Player-owned structures are not in the static geography (they come from ESI at runtime),
+# and ESI refuses to describe a structure the character has no docking rights for. This
+# snapshot of public structures gives EVEMon a name to show instead of "Inaccessible".
+STRUCTURE_TABLE_NAME = 'eve-structures-zh.txt.gzip'
 
 EVEMON_APPDATA = os.path.join(os.environ.get('APPDATA', ''), 'EVEMon')
 # EVEMon source Resources folder (version controlled). The build copies these
@@ -220,7 +226,32 @@ def load_evedata_items():
     return _load_evedata_sheet(EVEDATA_ITEM_SHEET, 3, '物品表（evedata）')
 
 
-def _load_evedata_sheet(sheet_path, min_cols, label):
+def write_structure_table(output_dirs, dry_run=False):
+    """Write structureID <TAB> name <TAB> solarSystemID for the runtime fallback lookup."""
+    rows = _load_evedata_sheet(EVEDATA_STRUCTURE_SHEET, 6, '玩家建筑表（evedata）',
+                               keep_all_columns=True)
+    lines = []
+    for structure_id, values in rows.items():
+        # values = [名称, 类型, 星系ID, 星系名字, ...]
+        name, solar_system_id = values[0], values[2]
+        if not name or not solar_system_id or not solar_system_id.isdigit():
+            continue
+        lines.append(f'{structure_id}\t{name}\t{solar_system_id}')
+    payload = '\n'.join(lines)
+    print(f'建筑兜底表: {len(lines)} 条')
+    if dry_run:
+        return len(lines)
+    for d in output_dirs:
+        if not os.path.isdir(d):
+            continue
+        path = os.path.join(d, STRUCTURE_TABLE_NAME)
+        with gzip.open(path, 'wt', encoding='utf-8') as f:
+            f.write(payload)
+        print(f'  已写出: {path} ({os.path.getsize(path)} bytes)')
+    return len(lines)
+
+
+def _load_evedata_sheet(sheet_path, min_cols, label, keep_all_columns=False):
     if not os.path.isfile(EVEDATA_XLSX):
         print(f'  !! evedata 工作簿不存在: {EVEDATA_XLSX}')
         return {}
@@ -244,9 +275,12 @@ def _load_evedata_sheet(sheet_path, min_cols, label):
                 values.append(node.text)
         if len(values) < min_cols or not values[0]:
             continue
-        if values[0] in ('空间站ID', 'typeID'):
+        if values[0] in ('空间站ID', 'typeID', '建筑物ID'):
             continue
-        out[values[0]] = tuple(values[1:min_cols]) if min_cols > 2 else values[1]
+        if keep_all_columns:
+            out[values[0]] = values[1:]
+        else:
+            out[values[0]] = tuple(values[1:min_cols]) if min_cols > 2 else values[1]
 
     print(f'{label}: {len(out)} 条')
     return out
@@ -486,6 +520,7 @@ def main():
                          output_dirs, args.dry_run)
 
     write_alias_table(en2zh, output_dirs, args.dry_run)
+    write_structure_table(output_dirs, args.dry_run)
     print('完成。')
 
 
