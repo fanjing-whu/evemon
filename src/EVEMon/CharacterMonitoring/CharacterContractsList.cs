@@ -1094,9 +1094,10 @@ namespace EVEMon.CharacterMonitoring
         /// <param name="e">The <see cref="System.EventArgs"/> instance containing the event data.</param>
         private void EveMonClient_ConquerableStationListUpdated(object sender, EventArgs e)
         {
-            if (Character == null)
-                return;
-
+            // Station info resolved. Only refresh; do NOT bail out when Character is null.
+            // The notification window never binds a character, so an early return here left
+            // its contract list permanently empty when the window was opened before the
+            // start/end stations had been resolved.
             foreach (Contract contract in m_list)
             {
                 contract.UpdateStation();
