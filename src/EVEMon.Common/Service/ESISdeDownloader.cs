@@ -819,10 +819,10 @@ namespace EVEMon.Common.Service
                     int count = LoadSkillsFromDatafileInternal(localCache, path);
                     if (count > 0)
                     {
-                        EveMonClient.Trace($"ESISdeDownloader: Loaded {count} skills from {sourceName}");
+                        EveMonClient.Trace($"ESISdeDownloader: {sourceName} usable ({count} skill entries found)");
                         return true;
                     }
-                    EveMonClient.Trace($"ESISdeDownloader: {sourceName} loaded but had no skills.");
+                    EveMonClient.Trace($"ESISdeDownloader: {sourceName} contains no skill entries.");
                 }
                 catch (Exception ex)
                 {
@@ -834,7 +834,13 @@ namespace EVEMon.Common.Service
         }
 
         /// <summary>
-        /// Internal helper: loads skills from a path into the cache, returns the count of skills added.
+        /// Internal helper: loads skills from a path into the cache.
+        /// Returns the number of skill entries present in the file.
+        ///
+        /// Skills are also listed in the items datafile, which is loaded first, so by the time
+        /// this runs most entries are already cached. Counting only the newly inserted ones made
+        /// the caller treat a perfectly readable file as missing, which produced a misleading
+        /// "[ERROR] No local skill data files found" message; the total is returned instead.
         /// </summary>
         private static int LoadSkillsFromDatafileInternal(Dictionary<int, EsiType> localCache, string path)
         {
@@ -858,21 +864,23 @@ namespace EVEMon.Common.Service
             {
                 foreach (var skill in group.Skills)
                 {
-                    if (!localCache.ContainsKey(skill.ID))
+                    skillCount++;
+
+                    // Already cached through the items datafile - nothing more to add
+                    if (localCache.ContainsKey(skill.ID))
+                        continue;
+
+                    localCache[skill.ID] = new EsiType
                     {
-                        localCache[skill.ID] = new EsiType
-                        {
-                            type_id = skill.ID,
-                            name = skill.Name ?? $"Skill {skill.ID}",
-                            description = skill.Description ?? "",
-                            published = skill.Public,
-                            group_id = group.ID,
-                            market_group_id = null,
-                            icon_id = null,
-                            portion_size = 1
-                        };
-                        skillCount++;
-                    }
+                        type_id = skill.ID,
+                        name = skill.Name ?? $"Skill {skill.ID}",
+                        description = skill.Description ?? "",
+                        published = skill.Public,
+                        group_id = group.ID,
+                        market_group_id = null,
+                        icon_id = null,
+                        portion_size = 1
+                    };
                 }
             }
             return skillCount;
