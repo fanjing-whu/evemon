@@ -65,6 +65,7 @@ TRN_TRANSLATIONS = r'C:\Users\Fanjing\AppData\Local\EveAutomation\sde\trnTransla
 # "吉他IV-卫星4-...").
 EVEDATA_XLSX = r'D:\Works\codes\fanjing\eve_auto_botlab\eve_read_memory_64_bit\data\sde\evedata_20260830.xlsx'
 EVEDATA_STATION_SHEET = 'xl/worksheets/sheet5.xml'
+EVEDATA_ITEM_SHEET = 'xl/worksheets/sheet1.xml'
 
 EVEMON_APPDATA = os.path.join(os.environ.get('APPDATA', ''), 'EVEMon')
 # EVEMon source Resources folder (version controlled). The build copies these
@@ -207,17 +208,30 @@ def load_station_names():
     Read with the standard library only (xlsx is a zip of XML), so the script has no
     third-party dependency.
     """
+    return _load_evedata_sheet(EVEDATA_STATION_SHEET, 2, '站名表（NPC空间站）')
+
+
+def load_evedata_items():
+    """Load typeID -> (name, description) from the Serenity market workbook.
+
+    Used as a last-resort layer: anything the localization pickle and the TQ translation
+    table could not resolve, mostly Serenity-only items.
+    """
+    return _load_evedata_sheet(EVEDATA_ITEM_SHEET, 3, '物品表（evedata）')
+
+
+def _load_evedata_sheet(sheet_path, min_cols, label):
     if not os.path.isfile(EVEDATA_XLSX):
-        print(f'  !! 站名数据表不存在: {EVEDATA_XLSX}')
+        print(f'  !! evedata 工作簿不存在: {EVEDATA_XLSX}')
         return {}
 
     ns = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
     with zipfile.ZipFile(EVEDATA_XLSX) as z:
         shared = [''.join(t.text or '' for t in si.iter(ns + 't'))
                   for si in ET.fromstring(z.read('xl/sharedStrings.xml'))]
-        sheet = ET.fromstring(z.read(EVEDATA_STATION_SHEET))
+        sheet = ET.fromstring(z.read(sheet_path))
 
-    names = {}
+    out = {}
     for row in sheet.findall(f'{ns}sheetData/{ns}row'):
         values = []
         for cell in row.findall(f'{ns}c'):
@@ -228,11 +242,47 @@ def load_station_names():
                 values.append(shared[int(node.text)])
             else:
                 values.append(node.text)
-        if len(values) >= 2 and values[0] and values[1] and values[0] != '空间站ID':
-            names[values[0]] = values[1]
+        if len(values) < min_cols or not values[0]:
+            continue
+        if values[0] in ('空间站ID', 'typeID'):
+            continue
+        out[values[0]] = tuple(values[1:min_cols]) if min_cols > 2 else values[1]
 
-    print(f'站名表: {len(names)} 条（NPC空间站）')
-    return names
+    print(f'{label}: {len(out)} 条')
+    return out
+
+
+def apply_evedata_fallback(xml, element, evedata_items, stats):
+    """Fill in names and descriptions still in English from the Serenity snapshot.
+
+    Runs last, so it only touches entries the pickle alias map and the TQ translation
+    table could not resolve.
+    """
+    pattern = re.compile(r'<' + element + r'\b[^>]*>')
+
+    def repl(m):
+        tag = m.group(0)
+        type_id = get_attr_value(tag, 'id')
+        entry = evedata_items.get(type_id) if type_id else None
+        if not entry:
+            return tag
+
+        name, desc = entry
+        current = get_attr_value(tag, 'name')
+        if current and not _CJK.search(current) and name:
+            tag = set_attr_value(tag, 'name', name)
+            stats['name_evedata'] += 1
+
+        current = get_attr_value(tag, 'description')
+        if current and not _CJK.search(current) and desc:
+            cleaned = clean_markup(desc)
+            if cleaned:
+                tag = set_attr_value(tag, 'description', cleaned)
+                stats['desc_evedata'] += 1
+
+        return tag
+
+    return pattern.sub(repl, xml)
 
 
 def apply_station_names(xml, station_names, stats):
@@ -262,6 +312,7 @@ def new_stats():
         'name_hit': 0, 'name_miss': 0,
         'desc_hit': 0, 'desc_miss': 0,
         'station_hit': 0, 'station_miss': 0,
+        'name_evedata': 0, 'desc_evedata': 0,
         'miss_samples': Counter(),
     }
 
@@ -298,7 +349,8 @@ def apply_type_descriptions(xml, element, type_descs, stats):
     return pattern.sub(repl, xml)
 
 
-def translate_datafile_xml(name, xml, en2zh, type_names, type_descs, station_names, stats):
+def translate_datafile_xml(name, xml, en2zh, type_names, type_descs, station_names,
+                           evedata_items, stats):
     """Apply the translation table (description) and the alias map (names)."""
     element = TYPEID_DATAFILES.get(name)
     if element:
@@ -326,11 +378,15 @@ def translate_datafile_xml(name, xml, en2zh, type_names, type_descs, station_nam
 
         xml = re.sub(pattern, repl, xml)
 
+    # Last resort: names/descriptions still in English from the Serenity snapshot
+    if element and evedata_items:
+        xml = apply_evedata_fallback(xml, element, evedata_items, stats)
+
     return xml
 
 
-def process_datafile(name, en2zh, type_names, type_descs, station_names, output_dirs,
-                     dry_run=False):
+def process_datafile(name, en2zh, type_names, type_descs, station_names, evedata_items,
+                     output_dirs, dry_run=False):
     """Translate one EVEMon datafile and write the -zh-CN variant."""
     src = os.path.join(EVEMON_APPDATA, f'{name}-{SRC_LANG}.xml.gzip')
     if not os.path.isfile(src):
@@ -341,7 +397,8 @@ def process_datafile(name, en2zh, type_names, type_descs, station_names, output_
         xml = f.read()
 
     stats = new_stats()
-    xml = translate_datafile_xml(name, xml, en2zh, type_names, type_descs, station_names, stats)
+    xml = translate_datafile_xml(name, xml, en2zh, type_names, type_descs, station_names,
+                                 evedata_items, stats)
 
     name_total = stats['name_hit'] + stats['name_miss']
     desc_total = stats['desc_hit'] + stats['desc_miss']
@@ -349,6 +406,9 @@ def process_datafile(name, en2zh, type_names, type_descs, station_names, output_
     desc_rate = stats['desc_hit'] / desc_total * 100 if desc_total else 0
     print(f'  {name}: 名称 {stats["name_hit"]}/{name_total} = {name_rate:.1f}%, '
           f'描述 {stats["desc_hit"]}/{desc_total} = {desc_rate:.1f}%')
+    if stats['name_evedata'] or stats['desc_evedata']:
+        print(f'    evedata 兜底补充: 名称 {stats["name_evedata"]} 项, '
+              f'描述 {stats["desc_evedata"]} 项')
     station_total = stats['station_hit'] + stats['station_miss']
     if station_total:
         station_rate = stats['station_hit'] / station_total * 100
@@ -413,6 +473,7 @@ def main():
 
     type_names, type_descs = load_type_translations()
     station_names = load_station_names()
+    evedata_items = load_evedata_items()
 
     names = list(DATAFILE_RULES.keys())
     if args.only:
@@ -421,8 +482,8 @@ def main():
 
     print('生成中文化数据文件:')
     for name in names:
-        process_datafile(name, en2zh, type_names, type_descs, station_names, output_dirs,
-                         args.dry_run)
+        process_datafile(name, en2zh, type_names, type_descs, station_names, evedata_items,
+                         output_dirs, args.dry_run)
 
     write_alias_table(en2zh, output_dirs, args.dry_run)
     print('完成。')
