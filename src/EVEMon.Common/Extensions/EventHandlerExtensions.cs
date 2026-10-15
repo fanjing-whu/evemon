@@ -51,11 +51,16 @@ namespace EVEMon.Common.Extensions
                     {
                         // Control was disposed between BeginInvoke and EndInvoke
                     }
-                    catch (IndexOutOfRangeException) when (sync is Control c && (c.IsDisposed || !c.IsHandleCreated))
+                    catch (IndexOutOfRangeException)
                     {
-                        // Control.EndInvoke throws IndexOutOfRangeException when the
-                        // control's internal async result list is cleared during disposal
-                        // or handle recreation (e.g. resize triggering layout changes).
+                        // Control.EndInvoke throws IndexOutOfRangeException when its internal
+                        // async result list is cleared mid-flight, i.e. while the control is
+                        // disposed OR when its handle is being recreated (resize, layout
+                        // change, visibility toggle). Checking IsDisposed/IsHandleCreated
+                        // afterwards is unreliable: by the time the exception surfaces the
+                        // handle may already exist again, so the guard used to let it escape
+                        // and take the whole process down. The handler simply did not run,
+                        // which is the right trade-off here.
                     }
 
                     continue;
@@ -111,11 +116,16 @@ namespace EVEMon.Common.Extensions
                     {
                         // Control was disposed between BeginInvoke and EndInvoke
                     }
-                    catch (IndexOutOfRangeException) when (sync is Control c && (c.IsDisposed || !c.IsHandleCreated))
+                    catch (IndexOutOfRangeException)
                     {
-                        // Control.EndInvoke throws IndexOutOfRangeException when the
-                        // control's internal async result list is cleared during disposal
-                        // or handle recreation (e.g. resize triggering layout changes).
+                        // Control.EndInvoke throws IndexOutOfRangeException when its internal
+                        // async result list is cleared mid-flight, i.e. while the control is
+                        // disposed OR when its handle is being recreated (resize, layout
+                        // change, visibility toggle). Checking IsDisposed/IsHandleCreated
+                        // afterwards is unreliable: by the time the exception surfaces the
+                        // handle may already exist again, so the guard used to let it escape
+                        // and take the whole process down. The handler simply did not run,
+                        // which is the right trade-off here.
                     }
 
                     continue;
