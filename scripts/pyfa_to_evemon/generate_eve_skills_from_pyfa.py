@@ -2,10 +2,13 @@
 """
 Generate EVEMon-compatible Chinese skill data file from Pyfa FSD data.
 
-Output: eve-skills-pyfa-zh-CN.xml.gzip
-  - Skill names in Chinese (typeName_zh)
-  - Skill group names in Chinese (groupName_zh)
-  - Falls back to English when Chinese is not available
+Output (both carry the pyfa- source tag; neither overwrites the official SDE files):
+  eve-skills-pyfa-zh-CN.xml.gzip
+    - Skill names in Chinese (typeName_zh)
+    - Skill group names in Chinese (groupName_zh)
+    - Falls back to English when Chinese is not available
+  eve-skills-pyfa-en-US.xml.gzip
+    - English names, same source and skill set
 """
 
 import json
@@ -22,7 +25,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 PYFA_DIR = r'D:\Works\codes\fanjing\evemon_cn\Pyfa\staticdata\fsd_built'
 OUTPUT_DIR = r'D:\Works\codes\fanjing\evemon_cn\evemon\src\EVEMon\bin\Release\net8.0-windows\Resources'
 OUTPUT_FILE_ZH = os.path.join(OUTPUT_DIR, 'eve-skills-pyfa-zh-CN.xml.gzip')
-OUTPUT_FILE_EN = os.path.join(OUTPUT_DIR, 'eve-skills-en-US.xml.gzip')
+OUTPUT_FILE_EN = os.path.join(OUTPUT_DIR, 'eve-skills-pyfa-en-US.xml.gzip')
 
 # Attribute ID mapping.
 # Verified against Pyfa FSD dogmaattributes.0.json:
@@ -229,7 +232,7 @@ def main():
     print()
     
     # Generate English version (also update)
-    print("--- Generating English version (eve-skills-en-US.xml.gzip) ---")
+    print("--- Generating English version (eve-skills-pyfa-en-US.xml.gzip) ---")
     root_en = generate_xml(all_types, groups_data, req_data, typedogma_data, skill_groups, use_chinese=False)
     write_gzip_xml(root_en, OUTPUT_FILE_EN)
     
