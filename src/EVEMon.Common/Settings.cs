@@ -85,11 +85,6 @@ namespace EVEMon.Common
         public static string SSOClientSecret { get; private set; }
 
         /// <summary>
-        /// Gets or sets the compatibility mode.
-        /// </summary>
-        public static CompatibilityMode Compatibility { get; private set; }
-
-        /// <summary>
         /// Gets or sets the EVE server type.
         /// </summary>
         public static EveServerType ServerType { get; private set; }
@@ -359,7 +354,6 @@ namespace EVEMon.Common
                 SSOClientID = SSOClientID,
                 SSOClientSecret = SSOClientSecret,
                 Revision = Revision,
-                Compatibility = Compatibility,
                 ServerType = ServerType,
                 Scheduler = Scheduler.Export(),
                 Calendar = Calendar,

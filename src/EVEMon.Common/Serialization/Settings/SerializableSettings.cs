@@ -51,9 +51,6 @@ namespace EVEMon.Common.Serialization.Settings
         /// </summary>
         [XmlAttribute("serverType")]
         public EveServerType ServerType { get; set; }
-
-        [XmlElement("compatibility")]
-        public CompatibilityMode Compatibility { get; set; }
         [XmlArray("esiKeys")]
         [XmlArrayItem("esikey")]
         public Collection<SerializableESIKey> ESIKeys => m_esiKeys;
