@@ -18,7 +18,7 @@ namespace EVEMon.Common.Data
     /// </summary>
     public static class StructureNameCache
     {
-        private const string Filename = "eve-structures-zh.txt.gzip";
+        private const string Filename = "eve-structures-zh-CN.txt.gzip";
 
         /// <summary>
         /// A structure name with the solar system it sits in.

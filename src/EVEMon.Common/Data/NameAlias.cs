@@ -18,7 +18,7 @@ namespace EVEMon.Common.Data
     /// </summary>
     public static class NameAlias
     {
-        private const string AliasFilename = "eve-name-alias-zh.txt.gzip";
+        private const string AliasFilename = "eve-name-alias-zh-CN.txt.gzip";
 
         private static Dictionary<string, string> s_englishToChinese;
         private static Dictionary<string, List<string>> s_chineseToEnglish;

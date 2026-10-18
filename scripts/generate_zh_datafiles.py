@@ -26,7 +26,7 @@ Data sources
 Output (written to the EVEMon Resources folder and %APPDATA%\\EVEMon)
 --------------------------------------------------------------------
   eve-<type>-zh-CN.xml.gzip   - datafiles with names/descriptions translated
-  eve-name-alias-zh.txt.gzip  - "English<TAB>Chinese" alias table, used by
+  eve-name-alias-zh-CN.txt.gzip  - "English<TAB>Chinese" alias table, used by
                                 EVEMon at runtime to resolve English names
                                 coming from ESI / EFT / XML sources
 
@@ -71,7 +71,7 @@ EVEDATA_STRUCTURE_SHEET = 'xl/worksheets/sheet6.xml'
 # Player-owned structures are not in the static geography (they come from ESI at runtime),
 # and ESI refuses to describe a structure the character has no docking rights for. This
 # snapshot of public structures gives EVEMon a name to show instead of "Inaccessible".
-STRUCTURE_TABLE_NAME = 'eve-structures-zh.txt.gzip'
+STRUCTURE_TABLE_NAME = 'eve-structures-zh-CN.txt.gzip'
 
 EVEMON_APPDATA = os.path.join(os.environ.get('APPDATA', ''), 'EVEMon')
 # EVEMon source Resources folder (version controlled). The build copies these
@@ -486,7 +486,7 @@ def write_alias_table(en2zh, output_dirs, dry_run=False):
     for d in output_dirs:
         if not os.path.isdir(d):
             continue
-        out_path = os.path.join(d, 'eve-name-alias-zh.txt.gzip')
+        out_path = os.path.join(d, 'eve-name-alias-zh-CN.txt.gzip')
         with gzip.open(out_path, 'wt', encoding='utf-8') as f:
             f.write(payload)
         print(f'  已写出: {out_path} ({os.path.getsize(out_path)} bytes)')

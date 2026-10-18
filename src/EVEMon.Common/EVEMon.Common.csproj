@@ -236,10 +236,10 @@
     <None Update="Resources\eve-skills-pyfa-zh-CN.xml.gzip">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Resources\eve-name-alias-zh.txt.gzip">
+    <None Update="Resources\eve-name-alias-zh-CN.txt.gzip">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Resources\eve-structures-zh.txt.gzip">
+    <None Update="Resources\eve-structures-zh-CN.txt.gzip">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Resources\License\gpl.txt">
